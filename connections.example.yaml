@@ -1,0 +1,33 @@
+# ==============================================================================
+# mcp-server-rdbms 多数据库连接配置示例文件
+# ==============================================================================
+
+# 默认操作的数据库别名（当调用工具未传入 db 参数时自动路由至此库）
+default: "local_sqlite"
+
+# 数据库连接池注册表
+connections:
+  # SQLite 本地文件或内存数据库示例
+  local_sqlite:
+    url: "sqlite:///./demo.db"
+    read_only: false
+
+  # PostgreSQL 数据库示例
+  postgres_prod:
+    url: "postgresql+psycopg://postgres:password@localhost:5432/mydb"
+    read_only: true
+
+  # MySQL 数据库示例
+  mysql_dev:
+    url: "mysql+pymysql://root:password@localhost:3306/devdb?charset=utf8mb4"
+    read_only: false
+
+  # Oracle 数据库示例 (需安装 optional dependency: uv pip install "mcp-server-rdbms[oracle]")
+  # oracle_db:
+  #   url: "oracle+oracledb://scott:tiger@localhost:1521/?service_name=orclpdb1"
+  #   read_only: true
+
+  # SQL Server 数据库示例 (需安装 optional dependency: uv pip install "mcp-server-rdbms[mssql]")
+  # mssql_db:
+  #   url: "mssql+pyodbc://sa:password@localhost:1433/testdb?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes"
+  #   read_only: true

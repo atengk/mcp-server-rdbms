@@ -1,0 +1,45 @@
+[project]
+name = "mcp-server-rdbms"
+version = "0.1.0"
+description = "Universal Relational Database Model Context Protocol (MCP) Server powered by SQLAlchemy & FastMCP"
+readme = "README.md"
+license = { text = "MIT" }
+authors = [
+    { name = "孔余", email = "2385569970@qq.com" }
+]
+requires-python = ">=3.12"
+keywords = ["mcp", "model-context-protocol", "database", "rdbms", "sql", "sqlalchemy", "llm"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Database",
+]
+dependencies = [
+    "mcp[cli]>=1.0.0",
+    "psycopg[binary]>=3.1.18",
+    "pymysql>=1.1.0",
+    "pyyaml>=6.0.1",
+    "rich>=13.0.0",
+    "sqlalchemy>=2.0.30",
+    "sqlglot>=25.0.0",
+]
+
+[project.optional-dependencies]
+oracle = ["oracledb>=2.0.0"]
+mssql = ["pyodbc>=5.0.0"]
+clickhouse = ["clickhouse-connect>=0.7.0"]
+all = [
+    "oracledb>=2.0.0",
+    "pyodbc>=5.0.0",
+    "clickhouse-connect>=0.7.0",
+]
+
+[project.scripts]
+mcp-server-rdbms = "mcp_server_rdbms:main"
+
+[build-system]
+requires = ["uv_build>=0.12.13,<0.13.0"]
+build-backend = "uv_build"
