@@ -24,7 +24,7 @@
    - 在 `.github/workflows/release.yml` 中集成 `orhun/git-cliff-action@v4`，发版时自动基于 Conventional Commits 历史提取生成结构化 Release 说明。
 4. **全自动多架构 GHCR 镜像分发 (`publish-docker`)**：
    - 在发版流水线中扩展 `publish-docker` Job，基于系统内置 `GITHUB_TOKEN` 自动登录 GitHub Container Registry；
-   - 自动构建并推送 `linux/amd64` 与 `linux/arm64` 双架构镜像至 `ghcr.io/atengk/atengk-mcp-server-rdbms:latest` 与版本 Tag。
+   - 自动构建并推送 `linux/amd64` 与 `linux/arm64` 双架构镜像至 `ghcr.io/atengk/mcp-server-rdbms:latest` 与版本 Tag。
 
 ## 收益与结果
 

@@ -9,5 +9,5 @@ from atengk_mcp_server_rdbms.cli import main
 from atengk_mcp_server_rdbms.core.connection import ConnectionRegistry
 from atengk_mcp_server_rdbms.server import create_server
 
-__version__ = "1.1.2"
+__version__ = "1.1.3"
 __all__ = ["ConnectionRegistry", "create_server", "main"]

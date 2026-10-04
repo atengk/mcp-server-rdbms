@@ -1,9 +1,13 @@
 services:
   mcp-rdbms:
+    # 官方预构建多架构镜像（默认 latest，生产环境建议绑定具体版本如 :1.1.3）
     image: ghcr.io/atengk/mcp-server-rdbms:latest
-    build:
-      context: .
-      dockerfile: Dockerfile
+    # image: ghcr.io/atengk/mcp-server-rdbms:1.1.3
+
+    # 若需基于本地源码二次开发构建镜像，可解开以下注释并执行 docker compose build：
+    # build:
+    #   context: .
+    #   dockerfile: Dockerfile
     container_name: mcp-server-rdbms
     restart: unless-stopped
     ports:

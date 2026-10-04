@@ -249,7 +249,7 @@ uv run atengk-mcp-server-rdbms --db-url "sqlite:///./demo.db"
 
 ### 1. 使用 Docker Compose 一键拉起（推荐 ⭐⭐⭐⭐⭐）
 
-在项目根目录下准备好 `connections.yaml`（或 `.env`），直接启动常驻守护容器：
+在服务器上准备好 `docker-compose.yaml` 与 `connections.yaml`（或仅配置 `.env` 环境变量），直接启动常驻守护容器（**无需克隆代码仓库，直接从 GHCR 拉取预构建官方镜像**）：
 
 ```bash
 # 启动常驻服务
@@ -266,8 +266,9 @@ docker compose down
 ```yaml
 services:
   mcp-rdbms:
-    build: .
-    image: atengk-mcp-server-rdbms:1.1.0
+    image: ghcr.io/atengk/mcp-server-rdbms:latest
+    # image: ghcr.io/atengk/mcp-server-rdbms:1.1.3
+    # build: .  # 开发者二次构建镜像时解开注释即可
     container_name: mcp-server-rdbms
     restart: unless-stopped
     ports:

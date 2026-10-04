@@ -96,6 +96,11 @@ _避免使用_: 镜像打包脚本 (Image Packager)、Docker 推送器 (Docker P
 项目中绝对不保留或维护静态 `CHANGELOG.md` 物理文件，版本历史 100% 依托 Conventional Commits 规范并通过 `.cliff.toml` 动态提取渲染至 GitHub Releases 的极简无状态架构。
 _避免使用_: 手写更新日志 (Manual Changelog)、静态日志文件 (Changelog File)
 
+**官方预构建容器编排器 (Pre-built Container Orchestrator)**:
+以 GHCR 云端多架构预构建镜像（`ghcr.io/atengk/mcp-server-rdbms`）为核心运行载荷的 Docker Compose 编排模式，实现最终用户零编译、免安装依赖、秒级拉起常驻守护容器，仅在开发者调试时可选解开源码构建指令。
+_避免使用_: 源码构建编排 (Source Build Compose)、混合编排器 (Hybrid Orchestrator)
+
+
 
 
 
