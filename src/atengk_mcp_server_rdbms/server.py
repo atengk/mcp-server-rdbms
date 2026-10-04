@@ -7,14 +7,14 @@ mcp-server-rdbms: FastMCP 服务装配与生命周期协调器.
 
 from mcp.server.mcpserver import MCPServer
 
-from mcp_server_rdbms.core.audit import AuditLogger
-from mcp_server_rdbms.core.connection import ConnectionRegistry
-from mcp_server_rdbms.tools.admin_queries import register_admin_tools
-from mcp_server_rdbms.tools.db_info import register_db_info_tool
-from mcp_server_rdbms.tools.schema_info import register_schema_tools
-from mcp_server_rdbms.tools.sql_ddl import register_ddl_tools
-from mcp_server_rdbms.tools.sql_dml import register_dml_tools
-from mcp_server_rdbms.tools.sql_query import register_query_tools
+from atengk_mcp_server_rdbms.core.audit import AuditLogger
+from atengk_mcp_server_rdbms.core.connection import ConnectionRegistry
+from atengk_mcp_server_rdbms.tools.admin_queries import register_admin_tools
+from atengk_mcp_server_rdbms.tools.db_info import register_db_info_tool
+from atengk_mcp_server_rdbms.tools.schema_info import register_schema_tools
+from atengk_mcp_server_rdbms.tools.sql_ddl import register_ddl_tools
+from atengk_mcp_server_rdbms.tools.sql_dml import register_dml_tools
+from atengk_mcp_server_rdbms.tools.sql_query import register_query_tools
 
 
 def create_server(

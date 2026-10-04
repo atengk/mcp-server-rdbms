@@ -1,33 +1,54 @@
 # ==============================================================================
-# mcp-server-rdbms 多数据库连接配置示例文件
+# atengk-mcp-server-rdbms: 多数据库连接配置文件模板 (connections.example.yaml)
+#
+# 使用方式:
+#   1. 复制本文件为 connections.yaml: cp connections.example.yaml connections.yaml
+#   2. 按需修改或添加您的真实数据库连接串
+#   3. 启动服务: uvx atengk-mcp-server-rdbms --config ./connections.yaml
 # ==============================================================================
 
-# 默认操作的数据库别名（当调用工具未传入 db 参数时自动路由至此库）
-default: "local_sqlite"
+# 默认全局连接别名（未传 db 参数时默认路由的目标库）
+default: "pg_main"
 
-# 数据库连接池注册表
+# 数据库连接字典清单
 connections:
-  # SQLite 本地文件或内存数据库示例
-  local_sqlite:
+  # ----------------------------------------------------------------------------
+  # 示例 1: PostgreSQL 生产主库 (支持读写模式与事务)
+  # ----------------------------------------------------------------------------
+  pg_main:
+    # 连接串格式: postgresql+psycopg://<用户名>:<密码>@<主机>:<端口>/<数据库名>
+    url: "postgresql+psycopg://postgres:YourSecurePassword@localhost:5432/production_db"
+    # 是否开启独立只读保护 (默认 true，设为 false 配合 --allow-dml 可执行增删改)
+    read_only: false
+    is_default: true
+
+  # ----------------------------------------------------------------------------
+  # 示例 2: MySQL 只读分析从库 (包含密码特殊字符 URL 编码示范)
+  # 注意: 若密码包含 @, :, /, # 等特殊字符，请使用 URL 编码 (如 @ -> %40)
+  # ----------------------------------------------------------------------------
+  mysql_read:
+    # 连接串格式: mysql+pymysql://<用户名>:<密码>@<主机>:<端口>/<数据库名>?charset=utf8mb4
+    url: "mysql+pymysql://root:Admin%40123@10.0.0.10:3306/analytics_db?charset=utf8mb4"
+    read_only: true
+
+  # ----------------------------------------------------------------------------
+  # 示例 3: 本地 SQLite 文件数据库 (轻量本地存储，开箱即用)
+  # ----------------------------------------------------------------------------
+  sqlite_local:
+    # 连接串格式: sqlite:///相对路径 或 sqlite:////绝对路径
     url: "sqlite:///./demo.db"
     read_only: false
 
-  # PostgreSQL 数据库示例
-  postgres_prod:
-    url: "postgresql+psycopg://postgres:password@localhost:5432/mydb"
-    read_only: true
-
-  # MySQL 数据库示例
-  mysql_dev:
-    url: "mysql+pymysql://root:password@localhost:3306/devdb?charset=utf8mb4"
-    read_only: false
-
-  # Oracle 数据库示例 (需安装 optional dependency: uv pip install "mcp-server-rdbms[oracle]")
-  # oracle_db:
-  #   url: "oracle+oracledb://scott:tiger@localhost:1521/?service_name=orclpdb1"
+  # ----------------------------------------------------------------------------
+  # 示例 4: Oracle 业务库 (需安装扩展: uv pip install "atengk-mcp-server-rdbms[oracle]")
+  # ----------------------------------------------------------------------------
+  # oracle_erp:
+  #   url: "oracle+oracledb://scott:tiger@192.168.1.100:1521/?service_name=orcl"
   #   read_only: true
 
-  # SQL Server 数据库示例 (需安装 optional dependency: uv pip install "mcp-server-rdbms[mssql]")
-  # mssql_db:
-  #   url: "mssql+pyodbc://sa:password@localhost:1433/testdb?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes"
+  # ----------------------------------------------------------------------------
+  # 示例 5: SQL Server 数据库 (需安装扩展: uv pip install "atengk-mcp-server-rdbms[mssql]")
+  # ----------------------------------------------------------------------------
+  # mssql_dw:
+  #   url: "mssql+pyodbc://sa:YourPass@192.168.1.200:1433/dw?driver=ODBC+Driver+18+for+SQL+Server&TrustServerCertificate=yes"
   #   read_only: true

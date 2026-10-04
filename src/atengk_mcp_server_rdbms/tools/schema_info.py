@@ -15,14 +15,14 @@ from sqlalchemy import inspect
 from sqlalchemy.engine.reflection import Inspector
 from sqlalchemy.exc import SQLAlchemyError
 
-from mcp_server_rdbms.core.connection import ConnectionRegistry
-from mcp_server_rdbms.core.exceptions import (
+from atengk_mcp_server_rdbms.core.connection import ConnectionRegistry
+from atengk_mcp_server_rdbms.core.exceptions import (
     ConnectionNotFoundError,
     DriverMissingError,
     TableNotFoundError,
 )
-from mcp_server_rdbms.core.schema_filter import SchemaFilter
-from mcp_server_rdbms.models.schema import (
+from atengk_mcp_server_rdbms.core.schema_filter import SchemaFilter
+from atengk_mcp_server_rdbms.models.schema import (
     ColumnDetail,
     ForeignKeyTopology,
     IndexDetail,

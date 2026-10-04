@@ -14,12 +14,12 @@ from mcp.server.mcpserver.exceptions import ToolError
 from sqlalchemy import Engine, text
 from sqlalchemy.exc import SQLAlchemyError
 
-from mcp_server_rdbms.core.connection import ConnectionRegistry
-from mcp_server_rdbms.core.exceptions import (
+from atengk_mcp_server_rdbms.core.connection import ConnectionRegistry
+from atengk_mcp_server_rdbms.core.exceptions import (
     ConnectionNotFoundError,
     DriverMissingError,
 )
-from mcp_server_rdbms.models.admin import RunningQueriesResult, RunningQuery
+from atengk_mcp_server_rdbms.models.admin import RunningQueriesResult, RunningQuery
 
 # 各方言活动查询系统探查 SQL 策略表
 _DIALECT_RUNNING_QUERY_SQL: dict[str, str] = {

@@ -12,7 +12,7 @@ from typing import Literal
 
 import anyio
 
-from mcp_server_rdbms.models.audit import AuditEvent
+from atengk_mcp_server_rdbms.models.audit import AuditEvent
 
 
 class AuditLogger:

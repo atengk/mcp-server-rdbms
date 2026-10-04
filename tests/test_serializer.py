@@ -9,7 +9,7 @@ import uuid
 from datetime import UTC, datetime
 from decimal import Decimal
 
-from mcp_server_rdbms.core.serializer import SafeSerializer
+from atengk_mcp_server_rdbms.core.serializer import SafeSerializer
 
 
 def test_serialize_decimal_datetime_uuid():

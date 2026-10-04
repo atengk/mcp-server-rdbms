@@ -12,9 +12,9 @@ from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from sqlalchemy import text
 
-from mcp_server_rdbms.core.connection import ConnectionRegistry
-from mcp_server_rdbms.server import create_server
-from mcp_server_rdbms.tools.db_info import register_db_info_tool
+from atengk_mcp_server_rdbms.core.connection import ConnectionRegistry
+from atengk_mcp_server_rdbms.server import create_server
+from atengk_mcp_server_rdbms.tools.db_info import register_db_info_tool
 
 
 def test_registry_from_yaml_dict_format(tmp_path: Path):

@@ -8,9 +8,12 @@ mcp-server-rdbms: 连接注册表与引擎管理测试.
 import pytest
 from sqlalchemy import text
 
-from mcp_server_rdbms.core.connection import ConnectionRegistry
-from mcp_server_rdbms.core.exceptions import ConnectionNotFoundError, DriverMissingError
-from mcp_server_rdbms.models.connection import ConnectionProfile
+from atengk_mcp_server_rdbms.core.connection import ConnectionRegistry
+from atengk_mcp_server_rdbms.core.exceptions import (
+    ConnectionNotFoundError,
+    DriverMissingError,
+)
+from atengk_mcp_server_rdbms.models.connection import ConnectionProfile
 
 
 def test_empty_registry_list_profiles():

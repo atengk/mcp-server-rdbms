@@ -7,7 +7,7 @@ mcp-server-rdbms: 模式与系统表过滤器测试.
 
 import pytest
 
-from mcp_server_rdbms.core.schema_filter import SchemaFilter
+from atengk_mcp_server_rdbms.core.schema_filter import SchemaFilter
 
 
 @pytest.mark.parametrize(

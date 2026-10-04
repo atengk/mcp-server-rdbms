@@ -38,6 +38,68 @@ wheels = [
 ]
 
 [[package]]
+name = "atengk-mcp-server-rdbms"
+version = "1.0.0"
+source = { editable = "." }
+dependencies = [
+    { name = "mcp", extra = ["cli"] },
+    { name = "psycopg", extra = ["binary"] },
+    { name = "pymysql" },
+    { name = "pyyaml" },
+    { name = "rich" },
+    { name = "sqlalchemy" },
+    { name = "sqlglot" },
+]
+
+[package.optional-dependencies]
+all = [
+    { name = "clickhouse-connect" },
+    { name = "oracledb" },
+    { name = "pyodbc" },
+]
+clickhouse = [
+    { name = "clickhouse-connect" },
+]
+mssql = [
+    { name = "pyodbc" },
+]
+oracle = [
+    { name = "oracledb" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "ruff" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "clickhouse-connect", marker = "extra == 'all'", specifier = ">=0.7.0" },
+    { name = "clickhouse-connect", marker = "extra == 'clickhouse'", specifier = ">=0.7.0" },
+    { name = "mcp", extras = ["cli"], specifier = ">=1.0.0" },
+    { name = "oracledb", marker = "extra == 'all'", specifier = ">=2.0.0" },
+    { name = "oracledb", marker = "extra == 'oracle'", specifier = ">=2.0.0" },
+    { name = "psycopg", extras = ["binary"], specifier = ">=3.1.18" },
+    { name = "pymysql", specifier = ">=1.1.0" },
+    { name = "pyodbc", marker = "extra == 'all'", specifier = ">=5.0.0" },
+    { name = "pyodbc", marker = "extra == 'mssql'", specifier = ">=5.0.0" },
+    { name = "pyyaml", specifier = ">=6.0.1" },
+    { name = "rich", specifier = ">=13.0.0" },
+    { name = "sqlalchemy", specifier = ">=2.0.30" },
+    { name = "sqlglot", specifier = ">=25.0.0" },
+]
+provides-extras = ["oracle", "mssql", "clickhouse", "all"]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "pytest", specifier = ">=9.1.1" },
+    { name = "pytest-asyncio", specifier = ">=1.4.0" },
+    { name = "ruff", specifier = ">=0.16.10" },
+]
+
+[[package]]
 name = "attrs"
 version = "26.1.0"
 source = { registry = "https://pypi.org/simple" }
@@ -493,68 +555,6 @@ wheels = [
 cli = [
     { name = "python-dotenv" },
     { name = "typer" },
-]
-
-[[package]]
-name = "mcp-server-rdbms"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "mcp", extra = ["cli"] },
-    { name = "psycopg", extra = ["binary"] },
-    { name = "pymysql" },
-    { name = "pyyaml" },
-    { name = "rich" },
-    { name = "sqlalchemy" },
-    { name = "sqlglot" },
-]
-
-[package.optional-dependencies]
-all = [
-    { name = "clickhouse-connect" },
-    { name = "oracledb" },
-    { name = "pyodbc" },
-]
-clickhouse = [
-    { name = "clickhouse-connect" },
-]
-mssql = [
-    { name = "pyodbc" },
-]
-oracle = [
-    { name = "oracledb" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "ruff" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "clickhouse-connect", marker = "extra == 'all'", specifier = ">=0.7.0" },
-    { name = "clickhouse-connect", marker = "extra == 'clickhouse'", specifier = ">=0.7.0" },
-    { name = "mcp", extras = ["cli"], specifier = ">=1.0.0" },
-    { name = "oracledb", marker = "extra == 'all'", specifier = ">=2.0.0" },
-    { name = "oracledb", marker = "extra == 'oracle'", specifier = ">=2.0.0" },
-    { name = "psycopg", extras = ["binary"], specifier = ">=3.1.18" },
-    { name = "pymysql", specifier = ">=1.1.0" },
-    { name = "pyodbc", marker = "extra == 'all'", specifier = ">=5.0.0" },
-    { name = "pyodbc", marker = "extra == 'mssql'", specifier = ">=5.0.0" },
-    { name = "pyyaml", specifier = ">=6.0.1" },
-    { name = "rich", specifier = ">=13.0.0" },
-    { name = "sqlalchemy", specifier = ">=2.0.30" },
-    { name = "sqlglot", specifier = ">=25.0.0" },
-]
-provides-extras = ["oracle", "mssql", "clickhouse", "all"]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "pytest", specifier = ">=9.1.1" },
-    { name = "pytest-asyncio", specifier = ">=1.4.0" },
-    { name = "ruff", specifier = ">=0.16.10" },
 ]
 
 [[package]]

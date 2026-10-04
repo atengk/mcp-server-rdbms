@@ -13,8 +13,8 @@ from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from sqlalchemy import text
 
-from mcp_server_rdbms.core.connection import ConnectionRegistry
-from mcp_server_rdbms.tools.sql_query import register_query_tools
+from atengk_mcp_server_rdbms.core.connection import ConnectionRegistry
+from atengk_mcp_server_rdbms.tools.sql_query import register_query_tools
 
 
 @pytest.fixture
@@ -132,7 +132,7 @@ async def test_sql_query_timeout_breaker(query_setup):
         time.sleep(0.1)
         return [], []
 
-    with patch("mcp_server_rdbms.tools.sql_query._execute_query_sync", side_effect=slow_exec):
+    with patch("atengk_mcp_server_rdbms.tools.sql_query._execute_query_sync", side_effect=slow_exec):
         with pytest.raises(ToolError) as exc_info:
             await server.call_tool("sql_query", {"sql": "SELECT * FROM users", "timeout": 0.01})
         assert "超时" in str(exc_info.value)

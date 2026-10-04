@@ -9,9 +9,9 @@ import argparse
 import os
 import sys
 
-from mcp_server_rdbms.core.connection import ConnectionRegistry
-from mcp_server_rdbms.core.exceptions import DriverMissingError
-from mcp_server_rdbms.server import create_server
+from atengk_mcp_server_rdbms.core.connection import ConnectionRegistry
+from atengk_mcp_server_rdbms.core.exceptions import DriverMissingError
+from atengk_mcp_server_rdbms.server import create_server
 
 
 def parse_args(args: list[str] | None = None) -> argparse.Namespace:

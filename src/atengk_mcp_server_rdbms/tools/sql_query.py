@@ -13,16 +13,16 @@ from mcp.server.mcpserver.exceptions import ToolError
 from sqlalchemy import Engine, text
 from sqlalchemy.exc import SQLAlchemyError
 
-from mcp_server_rdbms.core.connection import ConnectionRegistry
-from mcp_server_rdbms.core.dialect import DialectRegistry
-from mcp_server_rdbms.core.exceptions import (
+from atengk_mcp_server_rdbms.core.connection import ConnectionRegistry
+from atengk_mcp_server_rdbms.core.dialect import DialectRegistry
+from atengk_mcp_server_rdbms.core.exceptions import (
     ConnectionNotFoundError,
     DriverMissingError,
     SecurityViolationError,
 )
-from mcp_server_rdbms.core.guard import ASTGuard
-from mcp_server_rdbms.core.serializer import SafeSerializer
-from mcp_server_rdbms.models.query import ExplainResult, QueryResult
+from atengk_mcp_server_rdbms.core.guard import ASTGuard
+from atengk_mcp_server_rdbms.core.serializer import SafeSerializer
+from atengk_mcp_server_rdbms.models.query import ExplainResult, QueryResult
 
 
 def _execute_query_sync(

@@ -7,8 +7,8 @@ mcp-server-rdbms: AST 安全守卫与 LIMIT 注入测试.
 
 import pytest
 
-from mcp_server_rdbms.core.exceptions import SecurityViolationError
-from mcp_server_rdbms.core.guard import ASTGuard
+from atengk_mcp_server_rdbms.core.exceptions import SecurityViolationError
+from atengk_mcp_server_rdbms.core.guard import ASTGuard
 
 
 def test_simple_select_injects_limit():

@@ -14,9 +14,9 @@ from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from sqlalchemy import inspect, text
 
-from mcp_server_rdbms.core.audit import AuditLogger
-from mcp_server_rdbms.core.connection import ConnectionRegistry
-from mcp_server_rdbms.tools.sql_ddl import register_ddl_tools
+from atengk_mcp_server_rdbms.core.audit import AuditLogger
+from atengk_mcp_server_rdbms.core.connection import ConnectionRegistry
+from atengk_mcp_server_rdbms.tools.sql_ddl import register_ddl_tools
 
 
 @pytest.fixture

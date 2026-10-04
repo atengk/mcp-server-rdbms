@@ -10,7 +10,7 @@ from typing import ClassVar
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import ArgumentError
 
-from mcp_server_rdbms.core.exceptions import DriverMissingError
+from atengk_mcp_server_rdbms.core.exceptions import DriverMissingError
 
 
 class DialectRegistry:
@@ -91,11 +91,11 @@ class DialectRegistry:
             return (
                 f"缺少数据库驱动支持: 方言 '{dialect_name}' (驱动: '{driver_name or pkg}') 尚未安装。\n"
                 f"推荐执行以下命令安装可选依赖：\n"
-                f"  uv pip install \"mcp-server-rdbms[{extra}]\"\n"
+                f"  uv pip install \"atengk-mcp-server-rdbms[{extra}]\"\n"
                 f"或者直接安装驱动包：\n"
                 f"  uv pip install {pkg}\n"
                 f"如果使用 uvx 运行，可通过 --with 挂载：\n"
-                f"  uvx --with {pkg} mcp-server-rdbms ..."
+                f"  uvx --with {pkg} atengk-mcp-server-rdbms ..."
             )
 
         return (
@@ -103,7 +103,7 @@ class DialectRegistry:
             f"如果这是自定义或专有数据库驱动，请先安装该驱动包：\n"
             f"  uv pip install <驱动包>\n"
             f"如果使用 uvx 运行，可通过 --with 挂载：\n"
-            f"  uvx --with <驱动包> mcp-server-rdbms ..."
+            f"  uvx --with <驱动包> atengk-mcp-server-rdbms ..."
         )
 
     @classmethod

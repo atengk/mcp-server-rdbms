@@ -11,7 +11,7 @@ import sqlglot
 from sqlglot import exp
 from sqlglot.errors import ParseError
 
-from mcp_server_rdbms.core.exceptions import SecurityViolationError
+from atengk_mcp_server_rdbms.core.exceptions import SecurityViolationError
 
 
 class ASTGuard:

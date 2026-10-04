@@ -12,9 +12,9 @@ from unittest.mock import patch
 
 import pytest
 
-from mcp_server_rdbms.cli import build_registry_from_args, parse_args
-from mcp_server_rdbms.core.connection import ConnectionRegistry
-from mcp_server_rdbms.server import create_server
+from atengk_mcp_server_rdbms.cli import build_registry_from_args, parse_args
+from atengk_mcp_server_rdbms.core.connection import ConnectionRegistry
+from atengk_mcp_server_rdbms.server import create_server
 
 
 def test_parse_args_defaults():
@@ -84,9 +84,9 @@ async def test_create_server_end_to_end():
 
 
 def test_cli_subprocess_help_flag():
-    """验证通过真实子进程 python -m mcp_server_rdbms --help 可正常执行."""
+    """验证通过真实子进程 python -m atengk_mcp_server_rdbms --help 可正常执行."""
     proc = subprocess.run(
-        [sys.executable, "-m", "mcp_server_rdbms", "--help"],
+        [sys.executable, "-m", "atengk_mcp_server_rdbms", "--help"],
         capture_output=True,
         text=True,
         check=False,
@@ -100,7 +100,7 @@ def test_cli_subprocess_missing_driver_exit():
     env = os.environ.copy()
     env["PYTHONIOENCODING"] = "utf-8"
     proc = subprocess.run(
-        [sys.executable, "-m", "mcp_server_rdbms", "--db-url", "oracle+oracledb://scott:tiger@localhost:1521/xe"],
+        [sys.executable, "-m", "atengk_mcp_server_rdbms", "--db-url", "oracle+oracledb://scott:tiger@localhost:1521/xe"],
         capture_output=True,
         text=True,
         encoding="utf-8",

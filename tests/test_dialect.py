@@ -8,29 +8,29 @@ mcp-server-rdbms: 方言拦截器与驱动缺失诊断测试.
 import pytest
 from sqlalchemy.exc import NoSuchModuleError
 
-from mcp_server_rdbms.core.dialect import DialectRegistry
-from mcp_server_rdbms.core.exceptions import DriverMissingError
+from atengk_mcp_server_rdbms.core.dialect import DialectRegistry
+from atengk_mcp_server_rdbms.core.exceptions import DriverMissingError
 
 
 def test_oracle_missing_driver_hint():
     hint = DialectRegistry.get_install_hint("oracle+oracledb://scott:tiger@localhost/xe")
     assert "oracle" in hint
     assert "uv pip install" in hint
-    assert 'mcp-server-rdbms[oracle]' in hint
+    assert 'atengk-mcp-server-rdbms[oracle]' in hint
 
 
 def test_mssql_missing_driver_hint():
     hint = DialectRegistry.get_install_hint("mssql+pyodbc://localhost/test")
     assert "mssql" in hint
     assert "uv pip install" in hint
-    assert 'mcp-server-rdbms[mssql]' in hint
+    assert 'atengk-mcp-server-rdbms[mssql]' in hint
 
 
 def test_clickhouse_missing_driver_hint():
     hint = DialectRegistry.get_install_hint("clickhouse+connect://localhost:8123/default")
     assert "clickhouse" in hint
     assert "uv pip install" in hint
-    assert 'mcp-server-rdbms[clickhouse]' in hint
+    assert 'atengk-mcp-server-rdbms[clickhouse]' in hint
 
 
 def test_unknown_dialect_hint():

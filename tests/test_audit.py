@@ -10,8 +10,8 @@ from pathlib import Path
 
 import pytest
 
-from mcp_server_rdbms.core.audit import AuditLogger
-from mcp_server_rdbms.models.audit import AuditEvent
+from atengk_mcp_server_rdbms.core.audit import AuditLogger
+from atengk_mcp_server_rdbms.models.audit import AuditEvent
 
 
 def test_audit_logger_records_success(tmp_path: Path):

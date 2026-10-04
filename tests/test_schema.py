@@ -12,8 +12,8 @@ from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 from sqlalchemy import text
 
-from mcp_server_rdbms.core.connection import ConnectionRegistry
-from mcp_server_rdbms.tools.schema_info import register_schema_tools
+from atengk_mcp_server_rdbms.core.connection import ConnectionRegistry
+from atengk_mcp_server_rdbms.tools.schema_info import register_schema_tools
 
 
 @pytest.fixture

@@ -1,6 +1,6 @@
 [project]
-name = "mcp-server-rdbms"
-version = "0.1.0"
+name = "atengk-mcp-server-rdbms"
+version = "1.0.0"
 description = "Universal Relational Database Model Context Protocol (MCP) Server powered by SQLAlchemy & FastMCP"
 readme = "README.md"
 license = { text = "MIT" }
@@ -10,9 +10,8 @@ authors = [
 requires-python = ">=3.12"
 keywords = ["mcp", "model-context-protocol", "database", "rdbms", "sql", "sqlalchemy", "llm"]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 5 - Production/Stable",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.12",
     "Topic :: Database",
@@ -38,7 +37,8 @@ all = [
 ]
 
 [project.scripts]
-mcp-server-rdbms = "mcp_server_rdbms:main"
+atengk-mcp-server-rdbms = "atengk_mcp_server_rdbms:main"
+mcp-server-rdbms = "atengk_mcp_server_rdbms:main"
 
 [build-system]
 requires = ["uv_build>=0.12.13,<0.13.0"]

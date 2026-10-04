@@ -11,8 +11,8 @@ import pytest
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
-from mcp_server_rdbms.core.connection import ConnectionRegistry
-from mcp_server_rdbms.tools.db_info import register_db_info_tool
+from atengk_mcp_server_rdbms.core.connection import ConnectionRegistry
+from atengk_mcp_server_rdbms.tools.db_info import register_db_info_tool
 
 
 @pytest.fixture

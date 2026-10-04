@@ -14,16 +14,16 @@ from mcp.server.mcpserver.exceptions import ToolError
 from sqlalchemy import Engine, text
 from sqlalchemy.exc import SQLAlchemyError
 
-from mcp_server_rdbms.core.audit import AuditLogger, audit_logger
-from mcp_server_rdbms.core.connection import ConnectionRegistry
-from mcp_server_rdbms.core.exceptions import (
+from atengk_mcp_server_rdbms.core.audit import AuditLogger, audit_logger
+from atengk_mcp_server_rdbms.core.connection import ConnectionRegistry
+from atengk_mcp_server_rdbms.core.exceptions import (
     ConnectionNotFoundError,
     DriverMissingError,
     SecurityViolationError,
 )
-from mcp_server_rdbms.core.guard import ASTGuard
-from mcp_server_rdbms.models.audit import AuditEvent
-from mcp_server_rdbms.models.dml import DmlResult
+from atengk_mcp_server_rdbms.core.guard import ASTGuard
+from atengk_mcp_server_rdbms.models.audit import AuditEvent
+from atengk_mcp_server_rdbms.models.dml import DmlResult
 
 
 def _execute_dml_sync(engine: Engine, statements: list[str]) -> int:

@@ -12,9 +12,9 @@ from typing import Any
 from sqlalchemy import Engine, create_engine
 from sqlalchemy.exc import NoSuchModuleError, SQLAlchemyError
 
-from mcp_server_rdbms.core.dialect import DialectRegistry
-from mcp_server_rdbms.core.exceptions import ConnectionNotFoundError
-from mcp_server_rdbms.models.connection import ConnectionProfile
+from atengk_mcp_server_rdbms.core.dialect import DialectRegistry
+from atengk_mcp_server_rdbms.core.exceptions import ConnectionNotFoundError
+from atengk_mcp_server_rdbms.models.connection import ConnectionProfile
 
 logger = logging.getLogger(__name__)
 

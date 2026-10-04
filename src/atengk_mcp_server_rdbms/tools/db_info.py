@@ -14,9 +14,12 @@ from mcp.server.mcpserver.exceptions import ToolError
 from sqlalchemy import Connection, text
 from sqlalchemy.exc import SQLAlchemyError
 
-from mcp_server_rdbms.core.connection import ConnectionRegistry
-from mcp_server_rdbms.core.exceptions import ConnectionNotFoundError, DriverMissingError
-from mcp_server_rdbms.models.connection import ConnectionSummary, DatabaseInfo
+from atengk_mcp_server_rdbms.core.connection import ConnectionRegistry
+from atengk_mcp_server_rdbms.core.exceptions import (
+    ConnectionNotFoundError,
+    DriverMissingError,
+)
+from atengk_mcp_server_rdbms.models.connection import ConnectionSummary, DatabaseInfo
 
 logger = logging.getLogger(__name__)
 
