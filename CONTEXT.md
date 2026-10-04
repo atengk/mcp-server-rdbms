@@ -80,4 +80,17 @@ _避免使用_: 执行计划检查器 (Plan Checker)、EXPLAIN 解析器 (Explai
 在零外部依赖前提下自适应嗅探本地 `.env` 并在系统环境变量未设定时轻量注入的加载机制。
 _避免使用_: Dotenv 注入器 (Dotenv Injector)、文件加载器 (File Loader)
 
+**语义化拉取请求校验器 (Semantic PR Validator)**:
+在持续集成中自动依据 Conventional Commits 规范检验 Pull Request 标题合法性的自动化审查门禁。
+_避免使用_: PR 标题检查器 (PR Title Checker)、提交门禁 (Commit Gate)
+
+**自动化变更日志生成器 (Automated Changelog Generator)**:
+由 git-cliff 基于语义化提交历史自动提取、归类与渲染版本发布日志的免运维流水线。
+_避免使用_: 日志生成脚本 (Changelog Script)、发版备忘录 (Release Notes Generator)
+
+**容器镜像注册表分发器 (Container Registry Publisher)**:
+在版本发布时自动构建多架构 Docker 镜像并推送至 GHCR (GitHub Container Registry) 的持续交付作业。
+_避免使用_: 镜像打包脚本 (Image Packager)、Docker 推送器 (Docker Pusher)
+
+
 

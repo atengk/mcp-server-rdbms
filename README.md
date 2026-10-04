@@ -2,10 +2,11 @@
 
 <p align="center">
   <a href="https://pypi.org/project/atengk-mcp-server-rdbms/"><img src="https://img.shields.io/pypi/v/atengk-mcp-server-rdbms.svg?color=blue&label=PyPI" alt="PyPI version"></a>
-  <a href="https://pypi.org/project/atengk-mcp-server-rdbms/"><img src="https://img.shields.io/pypi/pyversions/atengk-mcp-server-rdbms.svg" alt="Python Versions"></a>
-  <a href="https://github.com/atengk/mcp-server-rdbms/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License"></a>
-  <a href="https://github.com/atengk/mcp-server-rdbms/actions"><img src="https://img.shields.io/badge/tests-137%20passed-brightgreen.svg" alt="Tests"></a>
-  <a href="https://modelcontextprotocol.io/"><img src="https://img.shields.io/badge/MCP-1.1.0-purple.svg" alt="MCP Protocol"></a>
+  <a href="https://github.com/atengk/mcp-server-rdbms/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/atengk/mcp-server-rdbms/ci.yml?branch=main&label=CI&style=flat-square" alt="CI Status"></a>
+  <a href="https://github.com/atengk/mcp-server-rdbms/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg?style=flat-square" alt="License"></a>
+  <a href="https://github.com/atengk/mcp-server-rdbms/actions"><img src="https://img.shields.io/badge/tests-137%20passed-brightgreen.svg?style=flat-square" alt="Tests"></a>
+  <a href="https://modelcontextprotocol.io/"><img src="https://img.shields.io/badge/MCP-1.1.0-purple.svg?style=flat-square" alt="MCP Protocol"></a>
+  <a href="./CONTRIBUTING.md"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square" alt="PRs Welcome"></a>
 </p>
 
 通用的关系型数据库模型上下文协议（Model Context Protocol, MCP）官方服务，基于 **Python 3.12+**、**SQLAlchemy 2.0** 与 **FastMCP** 现代化架构构建。专为各类大语言模型（LLM）与智能体（Claude、Cursor、Windsurf、Dify 等）提供标准、安全、可控、高内聚的多数据库探查、查询采样、慢查询诊断与原子事务变更能力。
@@ -294,7 +295,7 @@ docker run -d \
   -v $(pwd)/connections.yaml:/app/connections.yaml:ro \
   -v $(pwd)/rdbms_mcp_audit.log:/app/rdbms_mcp_audit.log:rw \
   -e MCP_RDBMS_CONFIG=/app/connections.yaml \
-  atengk-mcp-server-rdbms:1.1.0
+  ghcr.io/atengk/mcp-server-rdbms:latest
 
 # 方式 B：纯环境变量直连单数据库（免挂载任何文件，密码特殊字符自动免转义！）
 docker run -d \
@@ -306,7 +307,7 @@ docker run -d \
   -e MCP_RDBMS_USER=root \
   -e MCP_RDBMS_PASSWORD="Admin@123#2026" \
   -e MCP_RDBMS_DATABASE=mydb \
-  atengk-mcp-server-rdbms:1.1.0
+  ghcr.io/atengk/mcp-server-rdbms:latest
 ```
 
 ---
@@ -439,6 +440,12 @@ uv pip install "atengk-mcp-server-rdbms[all]"         # 一键安装所有驱动
    ```json
    {"timestamp":"2026-10-04T08:30:00Z","operation":"sql_dml","db":"pg_main","statements":["UPDATE users SET status = 1 WHERE id = 100"],"status":"SUCCESS","rows_affected":1,"duration_ms":12.5,"error":null}
    ```
+
+---
+
+## 🤝 参与贡献
+
+欢迎任何形式的贡献、Issue 反馈与功能提案！请在发起 PR 前仔细阅读我们的 [贡献指南 (CONTRIBUTING.md)](./CONTRIBUTING.md)。
 
 ---
 
