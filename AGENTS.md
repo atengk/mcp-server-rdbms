@@ -9,20 +9,21 @@
 `mcp-server-rdbms` 是基于 Python、FastMCP 与 SQLAlchemy 2.0 构建的通用关系型数据库 MCP 服务。
 
 ### 架构四维角色与分工
-1. **协议接入与装配 (`server.py`)**：负责 FastMCP 实例创建、CLI 参数解析与 8 核心工具挂载，保持轻薄。
+1. **协议接入与装配 (`server.py` / `cli.py`)**：负责 FastMCP 实例创建、CLI 参数解析、环境变量分层解析与 9 核心工具挂载，保持轻薄。
 2. **核心基础设施 (`core/`)**：
    - `connection.py`：连接池与多库配置中心 (`ConnectionRegistry`)。
-   - `guard.py`：基于 `sqlglot` 的 AST 语法树安全分析、只读校验与自动 `LIMIT` 重写注入。
+   - `guard.py`：基于 `sqlglot` 的 AST 语法树安全分析、只读校验、执行计划修饰过滤与自动 `LIMIT` 重写注入。
+   - `env.py`：环境变量分层解析、独立字段原子拼装与零依赖本地 `.env` 自适应探测器。
    - `dialect.py`：方言识别与缺失驱动智能拦截提示 (`DialectRegistry`)。
    - `audit.py`：写操作独立审计流水记录器 (`rdbms_mcp_audit.log`)。
 3. **领域工具实现 (`tools/`)**：严格按领域前缀隔离（`db_` / `schema_` / `sql_` / `admin_`）。
-4. **模型与契约 (`models/` 或 `config.py`)**：配置数据结构与结果载荷定义。
+4. **模型与契约 (`models/`)**：配置数据结构与结果载荷定义。
 
 ---
 
 ## 2. 不可违背的核心不变量 (Core Invariants)
 
-在编写任何代码与重构时，以下 6 条规则是最高安全与架构底线：
+在编写任何代码与重构时，以下 7 条规则是最高安全与架构底线：
 
 1. **异步事件循环防阻塞 (Offload Rule)**：
    - FastMCP 运行在异步事件循环中，而 SQLAlchemy 引擎采用标准同步模式。
@@ -43,6 +44,10 @@
 6. **缺失驱动友好拦截 (Fail-Friendly Rule)**：
    - 当遇到用户配置了未安装驱动的连接串（如 `oracle+oracledb://...`）触发 `NoSuchModuleError` 时，**严禁**直接暴露底层丑陋堆栈。
    - 必须通过 `DialectRegistry` 捕获并输出结构化提示，明确告知用户执行 `uv pip install "mcp-server-rdbms[dialect]"` 安装对应扩展。
+7. **执行计划只读防穿透 (Explain Guardrail Rule)**：
+   - `sql_explain` 必须由 `core/guard.py` 的 `validate_explain_query` 进行安全防护。
+   - 严格静态拦截 `ANALYZE` 与 `EXECUTE` 危险修饰符（防御 PostgreSQL 等方言中因 `EXPLAIN ANALYZE` 触发真实数据修改）；
+   - 自动识别并剥离前置 `EXPLAIN`，并强制内层查询必须通过 AST 深度只读验证。
 
 ---
 

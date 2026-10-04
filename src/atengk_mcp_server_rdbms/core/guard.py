@@ -5,6 +5,7 @@ mcp-server-rdbms: 基于 sqlglot 的 AST 语法树安全分析与 LIMIT 注入�
 @since 2026-10-04
 """
 
+import re
 from typing import ClassVar
 
 import sqlglot
@@ -20,6 +21,11 @@ class ASTGuard:
     @author Ateng
     @since 2026-10-04
     """
+
+    _EXPLAIN_PREFIX_PATTERN: ClassVar[re.Pattern[str]] = re.compile(r"^\s*explain\s+", re.IGNORECASE)
+    _DANGEROUS_EXPLAIN_MODIFIERS: ClassVar[re.Pattern[str]] = re.compile(
+        r"\b(analyze|execute)\b", re.IGNORECASE
+    )
 
     # 严禁在只读查询中出现的写入与破坏性 AST 节点类型（包含 SELECT INTO 等伪只读语句）
     _FORBIDDEN_MUTATION_NODES: ClassVar[tuple[type[exp.Expression], ...]] = (
@@ -143,6 +149,39 @@ class ASTGuard:
         expr = cls._parse_and_validate_ast(sql, dialect=dialect)
         norm_dialect = cls._normalize_dialect(dialect)
         return expr.sql(dialect=norm_dialect)
+
+    @classmethod
+    def validate_explain_query(
+        cls,
+        sql: str,
+        dialect: str | None = None,
+    ) -> str:
+        """执行计划语句安全校验：剥离前置 EXPLAIN 修饰并强制内层只读性检验.
+
+        防范大模型意图误用 EXPLAIN ANALYZE 造成伴随真实写操作的严重安全漏洞。
+
+        @param sql: 待校验的原始 SQL 文本（允许带或不带 EXPLAIN 前缀）
+        @param dialect: 数据库方言标识（可选）
+        @return: 剥离修饰符后经 AST 只读校验的安全 SQL 文本
+        @throws SecurityViolationError: 包含 ANALYZE 修饰或底层非只读操作时抛出
+        """
+        stripped = sql.strip().rstrip(";")
+        if not stripped:
+            raise SecurityViolationError("SQL 查询语句不能为空。")
+
+        # 检查是否包含危险的 ANALYZE / EXECUTE 修饰符
+        if cls._DANGEROUS_EXPLAIN_MODIFIERS.search(stripped):
+            raise SecurityViolationError(
+                "EXPLAIN 语句中严禁包含 ANALYZE 或 EXECUTE 等修饰符，防范意外触发真实写入变更。"
+            )
+
+        # 若包含前置 EXPLAIN 关键字，剥离后提取纯查询语句
+        inner_sql = cls._EXPLAIN_PREFIX_PATTERN.sub("", stripped).strip()
+        if not inner_sql:
+            raise SecurityViolationError("EXPLAIN 语句缺少待分析的底层查询内容。")
+
+        # 对内层真实查询执行严格 AST 只读性验证
+        return cls.validate_read_only(inner_sql, dialect=dialect)
 
     @classmethod
     def validate_and_rewrite_query(

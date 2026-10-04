@@ -3,6 +3,27 @@
 本项目所有显著变更均记录于此文件中。
 版本格式严格遵循 [语义化版本 2.0.0 (SemVer)](https://semver.org/lang/zh-CN/) 规范。
 
+## [1.1.0] - 2026-10-04
+
+### 🌟 核心特性与体验飞跃 (Major Enhancements)
+
+#### 1. 独立环境变量原子拼装与特殊字符免手动转义 (🔥 核心亮点)
+- **告别手工 URL 编码**：对于密码包含 `@`、`#`、`:`、`/` 等特殊字符的情况，支持直接在环境变量 `MCP_RDBMS_PASSWORD` 中填写原始明文密码，服务内置 RFC 1738 自动转义与防二次编码机制，彻底解决用户排错痛点；
+- **全套原子字段自动组合**：支持单独配置方言 (`MCP_RDBMS_DIALECT`)、主机 (`MCP_RDBMS_DB_HOST`)、端口 (`MCP_RDBMS_DB_PORT`)、用户 (`MCP_RDBMS_USER`)、密码 (`MCP_RDBMS_PASSWORD`) 与数据库名 (`MCP_RDBMS_DATABASE`)，自适应组合成合规连接串；
+- **驱动智能映射推导**：当未指定方言或驱动时，根据典型端口与方言名称自适应映射为最佳驱动（如 MySQL -> `mysql+pymysql`，PostgreSQL -> `postgresql+psycopg`，MSSQL -> `mssql+pyodbc`）。
+
+#### 2. 12-Factor App 传输层环境变量与 100% 容器无参启动
+- **通信协议与监听端口配置**：支持环境变量 `MCP_RDBMS_TRANSPORT`（`stdio` / `sse` / `streamable-http`）、`MCP_RDBMS_SERVER_HOST` / `HOST` 与 `MCP_RDBMS_SERVER_PORT` / `PORT`；
+- **宽容布尔转换器**：权限门禁变量对 `1`, `true`, `yes`, `on`, `t`（大小写及首尾空格不敏感）实现可靠的归一化解析；
+- **零依赖本地 `.env` 自动探测**：内置自适应加载当前工作目录下的 `.env` 文件，遵循“系统环境优先、不覆盖已有变量”防御原则，大幅加速本地自举开发。
+
+#### 3. 执行计划 (sql_explain) AST 深度只读守卫与 ANALYZE 拦截
+- **杜绝误写生产数据**：静态检测并强制拦截包含 `ANALYZE` 或 `EXECUTE` 等伴随真实写操作修饰符的 `EXPLAIN` 语句；
+- **Prompt 异构性容错**：自动识别并剥离前置 `EXPLAIN` 关键字，提取内层纯查询语句送入语法树深度检验，完美兼顾大语言模型输入习惯与数据库执行计划的安全性。
+
+#### 4. 生产级容器化资产 (Container Ecosystem)
+- 新增官方生产级极速 `Dockerfile` 与 `docker-compose.yaml` 部署模板，预置轻量 Python 3.12 与全量驱动支持，方便在内网 NAS、私有云或 Docker 环境中一键拉起常驻 SSE 协议服务。
+
 ---
 
 ## [1.0.0] - 2026-10-04

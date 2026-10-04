@@ -21,9 +21,9 @@ def test_parse_args_defaults():
     args = parse_args([])
     assert args.db_url is None
     assert args.config is None
-    assert args.transport == "stdio"
-    assert args.host == "127.0.0.1"
-    assert args.port == 8000
+    assert args.transport is None
+    assert args.host is None
+    assert args.port is None
     assert args.allow_dml is False
     assert args.allow_ddl is False
 
@@ -58,6 +58,41 @@ def test_build_registry_from_env_var():
         registry = build_registry_from_args(args)
         assert len(registry.list_profiles()) == 1
         assert registry.get_profile().url == "sqlite:///:memory:"
+
+
+def test_build_registry_from_mcp_rdbms_db_url():
+    args = parse_args([])
+    with patch.dict(os.environ, {"MCP_RDBMS_DB_URL": "sqlite:///:memory:"}):
+        registry = build_registry_from_args(args)
+        assert len(registry.list_profiles()) == 1
+        assert registry.get_profile().url == "sqlite:///:memory:"
+
+
+def test_build_registry_from_atomic_env_vars():
+    """测试通过原子环境变量拼装并自动完成特殊字符密码转义."""
+    args = parse_args([])
+    env = {
+        "MCP_RDBMS_DIALECT": "mysql",
+        "MCP_RDBMS_USER": "root",
+        "MCP_RDBMS_PASSWORD": "Admin@123#",
+        "MCP_RDBMS_DB_HOST": "127.0.0.1",
+        "MCP_RDBMS_DB_PORT": "3306",
+        "MCP_RDBMS_DATABASE": "test_db",
+    }
+    with patch.dict(os.environ, env):
+        registry = build_registry_from_args(args)
+        assert len(registry.list_profiles()) == 1
+        profile = registry.get_profile()
+        assert profile.url == "mysql+pymysql://root:Admin%40123%23@127.0.0.1:3306/test_db"
+
+
+def test_build_registry_from_mcp_config_env_var(tmp_path):
+    config_file = tmp_path / "test_conns.yaml"
+    config_file.write_text("connections:\n  demo:\n    url: 'sqlite:///:memory:'\n", encoding="utf-8")
+    args = parse_args([])
+    with patch.dict(os.environ, {"MCP_RDBMS_CONFIG": str(config_file)}):
+        registry = build_registry_from_args(args)
+        assert "demo" in [p.name for p in registry.list_profiles()]
 
 
 @pytest.mark.asyncio

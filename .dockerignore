@@ -1,0 +1,9 @@
+.git
+.venv
+dist
+.pytest_cache
+.ruff_cache
+scratch
+rdbms_mcp_audit.log
+*.pyc
+__pycache__

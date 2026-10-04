@@ -4,8 +4,8 @@
   <a href="https://pypi.org/project/atengk-mcp-server-rdbms/"><img src="https://img.shields.io/pypi/v/atengk-mcp-server-rdbms.svg?color=blue&label=PyPI" alt="PyPI version"></a>
   <a href="https://pypi.org/project/atengk-mcp-server-rdbms/"><img src="https://img.shields.io/pypi/pyversions/atengk-mcp-server-rdbms.svg" alt="Python Versions"></a>
   <a href="https://github.com/atengk/mcp-server-rdbms/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-green.svg" alt="License"></a>
-  <a href="https://github.com/atengk/mcp-server-rdbms/actions"><img src="https://img.shields.io/badge/tests-120%20passed-brightgreen.svg" alt="Tests"></a>
-  <a href="https://modelcontextprotocol.io/"><img src="https://img.shields.io/badge/MCP-1.0.0-purple.svg" alt="MCP Protocol"></a>
+  <a href="https://github.com/atengk/mcp-server-rdbms/actions"><img src="https://img.shields.io/badge/tests-137%20passed-brightgreen.svg" alt="Tests"></a>
+  <a href="https://modelcontextprotocol.io/"><img src="https://img.shields.io/badge/MCP-1.1.0-purple.svg" alt="MCP Protocol"></a>
 </p>
 
 通用的关系型数据库模型上下文协议（Model Context Protocol, MCP）官方服务，基于 **Python 3.12+**、**SQLAlchemy 2.0** 与 **FastMCP** 现代化架构构建。专为各类大语言模型（LLM）与智能体（Claude、Cursor、Windsurf、Dify 等）提供标准、安全、可控、高内聚的多数据库探查、查询采样、慢查询诊断与原子事务变更能力。
@@ -13,6 +13,51 @@
 ---
 
 ## 🌟 核心特性与架构底座
+
+### 🏗️ 系统全景架构拓扑 (Architecture Topology)
+
+```mermaid
+flowchart TD
+    subgraph ClientSide ["AI 客户端生态 (MCP Client)"]
+        Client["Claude Desktop / Cursor / VS Code / Dify / Windsurf"]
+    end
+
+    subgraph ProtocolLayer ["通信传输与分层环境层"]
+        FastMCP["FastMCP 协议服务器 (stdio / sse)"]
+        Env["分层环境解析器 (core/env.py)"]
+        Dotenv[".env 自动探测与 RFC 1738 密码免转义拼装"]
+    end
+
+    subgraph GuardLayer ["AST 深度语法安全守卫 (core/guard.py)"]
+        ASTParse["sqlglot AST 语法树解析与分析"]
+        ReadOnly["只读语义校验 (Select / CTE With)"]
+        LimitInject["自动注入安全 LIMIT 截断 (默认 100 行)"]
+        WhereGuard["DML 强制阻断无 WHERE 条件的 UPDATE/DELETE"]
+        ExplainGuard["sql_explain 危险修饰符 (ANALYZE) 拦截与剥离"]
+    end
+
+    subgraph EngineLayer ["连接池与多库路由中枢 (core/connection.py)"]
+        Registry["ConnectionRegistry (多库配置中心)"]
+        Pool["连接池健康预检与自愈 (pool_pre_ping)"]
+        Audit["独立审计流水日志 (rdbms_mcp_audit.log)"]
+    end
+
+    subgraph DatabaseLayer ["多元关系型数据库集群 (SQLAlchemy 2.0)"]
+        MySQL[("MySQL 8.x / 5.7 / MariaDB")]
+        PostgreSQL[("PostgreSQL 12~17")]
+        SQLite[("SQLite 内存库 / 本地文件库")]
+        Oracle[("Oracle 19c / 21c")]
+        MSSQL[("SQL Server / ClickHouse / 国产库")]
+    end
+
+    Client -->|"JSON-RPC (stdio / sse)"| FastMCP
+    Dotenv --> Env --> Registry
+    FastMCP -->|"9 核心工具调用"| GuardLayer
+    GuardLayer -->|"AST 验证通过"| Registry
+    Registry --> Pool
+    Pool -->|"工作线程池异步卸载 (anyio)"| DatabaseLayer
+    Registry -.->|"写操作流水异步落盘"| Audit
+```
 
 - 🚀 **通用多数据库抽象底座**：
   - 基于 SQLAlchemy 2.0 驱动引擎，默认内置 **SQLite**、**PostgreSQL** (`psycopg3`)、**MySQL** (`pymysql`)；
@@ -75,15 +120,52 @@ uv run atengk-mcp-server-rdbms --db-url "sqlite:///./demo.db"
 
 ---
 
-## 🔌 主流 AI 客户端一键接入实战
+## 🔌 MCP 客户端通用标准配置
 
-### 1. Claude Desktop 配置
+> 💡 **提示**：以下配置完全遵循 Model Context Protocol (MCP) 官方开放规范，适用于 **Claude Desktop**、**Cursor**、**Windsurf**、**VS Code** 以及任何兼容 MCP 协议的 AI 客户端。
 
-配置文件存放路径：
-- **Windows**: `%APPDATA%\Claude\claude_desktop_config.json`
-- **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+### 场景 1：标准本地调用 (stdio 协议，推荐)
 
-#### 模式 A：默认只读模式（推荐日常分析使用）
+在您所使用客户端的 MCP 配置文件（如 `mcp.json` 或 `claude_desktop_config.json`）的 `"mcpServers"` 块中添加。支持**环境变量注入**与**命令行参数**两种等价范式：
+
+#### 模式 A-1：原子字段模式（🔥 强烈推荐 ⭐⭐⭐⭐⭐，密码特殊字符免手动转义！）
+> 针对密码包含 `@`、`#`、`:` 等特殊字符的情况，**直接填写明文密码即可**！服务内置环境自动拼装器会自动进行 RFC 1738 安全转义，再也无需手工查表编码！
+
+```json
+{
+  "mcpServers": {
+    "rdbms": {
+      "command": "uvx",
+      "args": ["atengk-mcp-server-rdbms"],
+      "env": {
+        "MCP_RDBMS_DIALECT": "mysql",
+        "MCP_RDBMS_DB_HOST": "127.0.0.1",
+        "MCP_RDBMS_DB_PORT": "3306",
+        "MCP_RDBMS_USER": "root",
+        "MCP_RDBMS_PASSWORD": "Admin@123#2026",
+        "MCP_RDBMS_DATABASE": "mydb"
+      }
+    }
+  }
+}
+```
+
+#### 模式 A-2：全量连接串环境变量模式
+```json
+{
+  "mcpServers": {
+    "rdbms": {
+      "command": "uvx",
+      "args": ["atengk-mcp-server-rdbms"],
+      "env": {
+        "MCP_RDBMS_DB_URL": "postgresql+psycopg://user:password@localhost:5432/mydb"
+      }
+    }
+  }
+}
+```
+
+#### 模式 B：命令行参数直连模式
 ```json
 {
   "mcpServers": {
@@ -99,46 +181,18 @@ uv run atengk-mcp-server-rdbms --db-url "sqlite:///./demo.db"
 }
 ```
 
-#### 模式 B：多库读写模式（开发调试与运维操作）
-```json
-{
-  "mcpServers": {
-    "rdbms-cluster": {
-      "command": "uvx",
-      "args": [
-        "atengk-mcp-server-rdbms",
-        "--config",
-        "/path/to/connections.yaml",
-        "--allow-dml",
-        "--allow-ddl"
-      ]
-    }
-  }
-}
-```
-
----
-
-### 2. Cursor 配置
-
-在项目根目录创建 `.cursor/mcp.json`，或在 Cursor 设置中打开 **Features -> MCP -> Add New MCP Server**：
-
-- **Name**: `rdbms`
-- **Type**: `command`
-- **Command**: `uvx atengk-mcp-server-rdbms --db-url "postgresql+psycopg://postgres:password@localhost:5432/my_dev_db"`
-
-或者直接在 `.cursor/mcp.json` 文件中配置：
+#### 模式 C：多数据库配置中心模式
 ```json
 {
   "mcpServers": {
     "rdbms": {
       "command": "uvx",
-      "args": [
-        "atengk-mcp-server-rdbms",
-        "--db-url",
-        "sqlite:///./workspace.db",
-        "--allow-dml"
-      ]
+      "args": ["atengk-mcp-server-rdbms"],
+      "env": {
+        "MCP_RDBMS_CONFIG": "/path/to/connections.yaml",
+        "MCP_RDBMS_ALLOW_DML": "true",
+        "MCP_RDBMS_ALLOW_DDL": "true"
+      }
     }
   }
 }
@@ -146,20 +200,40 @@ uv run atengk-mcp-server-rdbms --db-url "sqlite:///./demo.db"
 
 ---
 
-### 3. Windsurf 配置
+### 🌐 环境变量完整速查矩阵 (12-Factor App)
 
-配置文件存放路径：`~/.codeium/windsurf/mcp_config.json`
+服务提供官方推荐前缀 `MCP_RDBMS_*` 与通用标准环境变量双重支持：
+
+| 分类 | 推荐主环境变量 | 宽容兼容变量 | 默认值 / 行为说明 |
+| :--- | :--- | :--- | :--- |
+| **完整连接** | `MCP_RDBMS_DB_URL` | `DATABASE_URL` | 完整 RFC 1738 连接串（如 `sqlite:///:memory:`） |
+| **多库配置** | `MCP_RDBMS_CONFIG` | `CONFIG_FILE` | 多数据源 YAML 配置文件绝对路径 |
+| **数据库方言** | `MCP_RDBMS_DIALECT` | `DB_DIALECT` | 数据库类型（`mysql`, `postgresql`, `oracle`, `mssql`, `sqlite` 等） |
+| **主机地址** | `MCP_RDBMS_DB_HOST` | `DB_HOST` | 数据库主机 IP 或域名（默认: `127.0.0.1`） |
+| **端口** | `MCP_RDBMS_DB_PORT` | `DB_PORT` | 数据库端口（缺省按方言自适应推导，如 MySQL 3306, PG 5432） |
+| **用户名** | `MCP_RDBMS_USER` | `DB_USER` / `DB_USERNAME` | 数据库登录用户 |
+| **密码** | `MCP_RDBMS_PASSWORD` | `DB_PASSWORD` / `DB_PASS` | **明文自动 URL 安全编码（如 `@` -> `%40`，彻底防踩坑）** |
+| **数据库名称** | `MCP_RDBMS_DATABASE` | `DB_NAME` / `DB_DATABASE` | 目标数据库/Schema 库名 |
+| **附加参数** | `MCP_RDBMS_PARAMS` | `DB_PARAMS` | 连接查询参数（如 `charset=utf8mb4`） |
+| **增删改权限** | `MCP_RDBMS_ALLOW_DML`| `MCP_ALLOW_DML` | 宽容布尔值（`1`, `true`, `yes`, `on`, `t` 大小写不敏感） |
+| **表结构变更** | `MCP_RDBMS_ALLOW_DDL`| `MCP_ALLOW_DDL` | 宽容布尔值（`1`, `true`, `yes`, `on`, `t` 大小写不敏感） |
+| **通信传输协议** | `MCP_RDBMS_TRANSPORT`| `MCP_TRANSPORT` | `stdio`（默认）、`sse`、`streamable-http` |
+| **服务监听地址** | `MCP_RDBMS_SERVER_HOST` | `HOST` | SSE/HTTP 监听地址（默认: `127.0.0.1`） |
+| **服务监听端口** | `MCP_RDBMS_SERVER_PORT` | `PORT` | SSE/HTTP 监听端口（默认: `8000`） |
+
+> 📌 **解析优先级规则**：`命令行参数 (最高)` > `全量 URL 环境变量` > `独立字段环境变量拼装` > `标准内置默认值`。本地执行时会自动探测读取同级目录下的 `.env` 文件。
+
+---
+
+### 场景 2：远程服务调用 (SSE 协议客户端接入)
+
+若服务已部署在局域网、云服务器或容器中，客户端可直接通过标准 HTTP SSE 端点接入：
 
 ```json
 {
   "mcpServers": {
-    "rdbms": {
-      "command": "uvx",
-      "args": [
-        "atengk-mcp-server-rdbms",
-        "--config",
-        "/Users/username/workspace/connections.yaml"
-      ]
+    "rdbms-remote": {
+      "url": "http://<服务器IP>:8000/sse"
     }
   }
 }
@@ -167,20 +241,73 @@ uv run atengk-mcp-server-rdbms --db-url "sqlite:///./demo.db"
 
 ---
 
-### 4. Cherry Studio / Dify / 远程网关 (SSE 远程模式)
+## 🐳 生产环境容器化常驻部署 (Docker & Docker Compose)
 
-若您需要在局域网服务器或 Docker 容器中以后台常驻服务形式运行，并供其他机器或 Web 平台远程连接：
+针对内网私有云、NAS（群晖/威联通）或 Linux 服务器，项目提供官方生产级 [`Dockerfile`](Dockerfile) 与 [`docker-compose.yaml`](docker-compose.yaml)，支持 **100% 环境变量无参启动**。
+
+### 1. 使用 Docker Compose 一键拉起（推荐 ⭐⭐⭐⭐⭐）
+
+在项目根目录下准备好 `connections.yaml`（或 `.env`），直接启动常驻守护容器：
 
 ```bash
-# 启动远程 SSE 协议服务端
-uvx atengk-mcp-server-rdbms \
-  --config ./connections.yaml \
-  --transport sse \
-  --host 0.0.0.0 \
-  --port 8000
+# 启动常驻服务
+docker compose up -d
+
+# 查看运行日志与连接池状态
+docker compose logs -f
+
+# 停止服务
+docker compose down
 ```
-在支持 SSE 协议的客户端中，直接填入 SSE 端点 URL 即可：
-`http://<服务器IP>:8000/sse`
+
+`docker-compose.yaml` 核心配置解析：
+```yaml
+services:
+  mcp-rdbms:
+    build: .
+    image: atengk-mcp-server-rdbms:1.1.0
+    container_name: mcp-server-rdbms
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - MCP_RDBMS_TRANSPORT=sse
+      - MCP_RDBMS_SERVER_HOST=0.0.0.0
+      - MCP_RDBMS_SERVER_PORT=8000
+      - MCP_RDBMS_CONFIG=/app/connections.yaml
+    volumes:
+      # 挂载多库配置（只读）
+      - ./connections.yaml:/app/connections.yaml:ro
+      # 挂载操作审计流水日志（宿主机持久化保存）
+      - ./rdbms_mcp_audit.log:/app/rdbms_mcp_audit.log:rw
+```
+
+### 2. 使用 Docker CLI 独立运行
+
+亦可直接使用标准 `docker run` 命令启动：
+
+```bash
+# 方式 A：挂载本地 connections.yaml 多库配置启动
+docker run -d \
+  --name mcp-rdbms \
+  -p 8000:8000 \
+  -v $(pwd)/connections.yaml:/app/connections.yaml:ro \
+  -v $(pwd)/rdbms_mcp_audit.log:/app/rdbms_mcp_audit.log:rw \
+  -e MCP_RDBMS_CONFIG=/app/connections.yaml \
+  atengk-mcp-server-rdbms:1.1.0
+
+# 方式 B：纯环境变量直连单数据库（免挂载任何文件，密码特殊字符自动免转义！）
+docker run -d \
+  --name mcp-rdbms \
+  -p 8000:8000 \
+  -e MCP_RDBMS_DIALECT=mysql \
+  -e MCP_RDBMS_DB_HOST=192.168.1.100 \
+  -e MCP_RDBMS_DB_PORT=3306 \
+  -e MCP_RDBMS_USER=root \
+  -e MCP_RDBMS_PASSWORD="Admin@123#2026" \
+  -e MCP_RDBMS_DATABASE=mydb \
+  atengk-mcp-server-rdbms:1.1.0
+```
 
 ---
 
@@ -217,6 +344,8 @@ SQLAlchemy 底层解析数据库连接串时采用标准 RFC 1738 URL 规范。*
 > python -c "from urllib.parse import quote_plus; print(quote_plus('Admin@123#2026'))"
 > # 输出: Admin%40123%232026
 > ```
+> 
+> 🚀 **终极省心方案**：若使用上述 **原子字段环境变量模式**（如 `MCP_RDBMS_PASSWORD`），直接填入原始密码明文即可，服务启动时将自动完成 URL 安全编码，彻底避免因遗漏转义导致的崩溃！
 
 ---
 

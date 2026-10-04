@@ -1,0 +1,26 @@
+services:
+  mcp-rdbms:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: atengk-mcp-server-rdbms:1.1.0
+    container_name: mcp-server-rdbms
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - MCP_RDBMS_TRANSPORT=sse
+      - MCP_RDBMS_SERVER_HOST=0.0.0.0
+      - MCP_RDBMS_SERVER_PORT=8000
+      # 模式 1：挂载 connections.yaml 配置文件
+      - MCP_RDBMS_CONFIG=/app/connections.yaml
+      # 模式 2：或者直接使用独立环境变量（支持密码特殊字符免转义）
+      # - MCP_RDBMS_DIALECT=mysql
+      # - MCP_RDBMS_DB_HOST=host.docker.internal
+      # - MCP_RDBMS_DB_PORT=3306
+      # - MCP_RDBMS_USER=root
+      # - MCP_RDBMS_PASSWORD=Admin@123#2026
+      # - MCP_RDBMS_DATABASE=mydb
+    volumes:
+      - ./connections.yaml:/app/connections.yaml:ro
+      - ./rdbms_mcp_audit.log:/app/rdbms_mcp_audit.log:rw

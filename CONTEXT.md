@@ -60,3 +60,24 @@ _避免使用_: 更新日志草稿 (Changelog Draft)、发版文案 (Release Tex
 以 `atengk-mcp-server-` 为规范前缀的系列化 MCP 服务产品矩阵体系，用于在全局扁平包索引中建立唯一的专属命名空间隔离与品牌辨识。
 _避免使用_: 用户名前缀 (User Prefix)、账号作用域 (Account Scope)
 
+**分层环境变量解析器 (Hierarchical Env Resolver)**:
+统一支持 CLI 参数、全量连接串、独立原子字段、运行权限与传输协议的分层回退解析体系。
+_避免使用_: 环境加载器 (Env Loader)、参数合并器 (Args Merger)
+
+**环境自动拼装器 (Env Auto Assembler)**:
+将独立环境变量（方言、主机、端口、用户、密码、库名）自动合成符合 RFC 1738 规范的数据库连接串，并对特殊字符密码自动执行 URL 编码的安全拼装器。
+_避免使用_: URL 拼接函数 (URL Builder)、连接串合成器 (String Concat)
+
+**宽容布尔转换器 (Tolerant Boolean Converter)**:
+将多源字符串（`1, true, yes, on, t`，不区分大小写及首尾空格）统一可靠映射为标准 Python 布尔状态的解析适配器。
+_避免使用_: 布尔检查器 (Bool Checker)、Flag 转换器 (Flag Parser)
+
+**执行计划守卫 (Explain Guardrail)**:
+在生成慢查询执行计划前拦截危险 ANALYZE 选项、剥离冗余修饰并校验内层语法树只读性的防御层。
+_避免使用_: 执行计划检查器 (Plan Checker)、EXPLAIN 解析器 (Explain Parser)
+
+**本地环境探测器 (Dotenv Detector)**:
+在零外部依赖前提下自适应嗅探本地 `.env` 并在系统环境变量未设定时轻量注入的加载机制。
+_避免使用_: Dotenv 注入器 (Dotenv Injector)、文件加载器 (File Loader)
+
+

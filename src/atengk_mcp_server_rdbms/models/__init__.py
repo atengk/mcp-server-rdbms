@@ -7,6 +7,7 @@ mcp-server-rdbms: 领域模型与数据契约包.
 
 from atengk_mcp_server_rdbms.models.admin import RunningQueriesResult, RunningQuery
 from atengk_mcp_server_rdbms.models.audit import AuditEvent
+from atengk_mcp_server_rdbms.models.config import ServerRuntimeConfig
 from atengk_mcp_server_rdbms.models.connection import (
     ConnectionProfile,
     ConnectionSummary,
@@ -38,6 +39,7 @@ __all__ = [
     "QueryResult",
     "RunningQueriesResult",
     "RunningQuery",
+    "ServerRuntimeConfig",
     "TableDetail",
     "TableListResult",
     "TableSummary",

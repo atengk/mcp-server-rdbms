@@ -185,3 +185,31 @@ def test_ddl_multi_statement_blocked():
     assert "严禁拼接执行多条" in str(exc_info.value)
 
 
+def test_validate_explain_query_success():
+    """验证合法的 SELECT 与带 EXPLAIN 前缀的语句正确放行并剥离修饰."""
+    # 纯查询放行
+    sql1 = ASTGuard.validate_explain_query("SELECT id, name FROM users WHERE id = 1")
+    assert "SELECT id, name FROM users WHERE id = 1" in sql1
+
+    # 带 EXPLAIN 前缀安全剥离并放行
+    sql2 = ASTGuard.validate_explain_query("EXPLAIN SELECT id, name FROM users")
+    assert "SELECT id, name FROM users" in sql2
+
+
+def test_validate_explain_query_blocks_analyze_and_mutation():
+    """验证 EXPLAIN 语句中带有 ANALYZE 修饰或包含写操作时强制拦截."""
+    # 拦截 ANALYZE 修饰（防范真实执行写操作）
+    with pytest.raises(SecurityViolationError) as exc1:
+        ASTGuard.validate_explain_query("EXPLAIN ANALYZE SELECT * FROM users")
+    assert "严禁包含 ANALYZE" in str(exc1.value)
+
+    # 拦截 EXPLAIN INSERT
+    with pytest.raises(SecurityViolationError) as exc2:
+        ASTGuard.validate_explain_query("EXPLAIN INSERT INTO users (id) VALUES (1)")
+    assert "只读查询中禁止包含修改" in str(exc2.value) or "不是支持的只读查询语句" in str(exc2.value)
+
+    # 拦截纯写操作
+    with pytest.raises(SecurityViolationError):
+        ASTGuard.validate_explain_query("UPDATE users SET name = 'admin'")
+
+

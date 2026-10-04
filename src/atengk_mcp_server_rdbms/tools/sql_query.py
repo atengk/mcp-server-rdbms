@@ -147,8 +147,8 @@ def register_query_tools(server: MCPServer, registry: ConnectionRegistry) -> Non
             # 1. 获取数据库引擎
             engine = registry.get_engine(db)
 
-            # 2. AST 纯只读性校验（保留原始语句，不强插 LIMIT 影响计划真实性）
-            safe_sql = ASTGuard.validate_read_only(sql, dialect=engine.dialect.name)
+            # 2. AST 纯只读性校验与修饰符安全过滤（杜绝 EXPLAIN ANALYZE 真实写入，提取内层只读语句）
+            safe_sql = ASTGuard.validate_explain_query(sql, dialect=engine.dialect.name)
 
             # 3. 线程池异步卸载执行 EXPLAIN（配 30 秒熔断防护）
             with anyio.fail_after(30.0):
