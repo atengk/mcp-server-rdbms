@@ -267,7 +267,7 @@ docker compose down
 services:
   mcp-rdbms:
     image: ghcr.io/atengk/mcp-server-rdbms:latest
-    # image: ghcr.io/atengk/mcp-server-rdbms:1.1.3
+    # image: ghcr.io/atengk/mcp-server-rdbms:1.1.4
     # build: .  # 开发者二次构建镜像时解开注释即可
     container_name: mcp-server-rdbms
     restart: unless-stopped

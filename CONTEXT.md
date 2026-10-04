@@ -100,6 +100,15 @@ _避免使用_: 手写更新日志 (Manual Changelog)、静态日志文件 (Chan
 以 GHCR 云端多架构预构建镜像（`ghcr.io/atengk/mcp-server-rdbms`）为核心运行载荷的 Docker Compose 编排模式，实现最终用户零编译、免安装依赖、秒级拉起常驻守护容器，仅在开发者调试时可选解开源码构建指令。
 _避免使用_: 源码构建编排 (Source Build Compose)、混合编排器 (Hybrid Orchestrator)
 
+**纯净镜像分发矩阵 (Clean Multi-arch Image Matrix)**:
+严格遵循 SemVer 规范计算镜像标签（主版本、次版本、补丁版本与自适应 `latest`），并显式声明 `provenance: false` 与 `sbom: false` 以彻底杜绝 Registry 幽灵标签与多架构索引冲突的纯净容器分发模式。
+_避免使用_: 冗余标签策略 (Redundant Tagging)、单架构打包 (Single Arch Build)
+
+**动态元数据版本反射 (Dynamic Metadata Versioning)**:
+遵循单一真实数据源 (SSOT) 原则，仅在 `pyproject.toml` 维护版本号，模块顶层通过标准库 `importlib.metadata.version` 动态读取运行时包版本的解耦设计。
+_避免使用_: 硬编码版本 (Hardcoded Version)、双重版本维护 (Dual Version Maintenance)
+
+
 
 
 
