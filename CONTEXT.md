@@ -92,5 +92,10 @@ _避免使用_: 日志生成脚本 (Changelog Script)、发版备忘录 (Release
 在版本发布时自动构建多架构 Docker 镜像并推送至 GHCR (GitHub Container Registry) 的持续交付作业。
 _避免使用_: 镜像打包脚本 (Image Packager)、Docker 推送器 (Docker Pusher)
 
+**零物理变更日志 (Stateless Zero-File Changelog)**:
+项目中绝对不保留或维护静态 `CHANGELOG.md` 物理文件，版本历史 100% 依托 Conventional Commits 规范并通过 `.cliff.toml` 动态提取渲染至 GitHub Releases 的极简无状态架构。
+_避免使用_: 手写更新日志 (Manual Changelog)、静态日志文件 (Changelog File)
+
+
 
 

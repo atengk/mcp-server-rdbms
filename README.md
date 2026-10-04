@@ -2,6 +2,7 @@
 
 <p align="center">
   <a href="https://pypi.org/project/atengk-mcp-server-rdbms/"><img src="https://img.shields.io/pypi/v/atengk-mcp-server-rdbms.svg?color=blue&label=PyPI" alt="PyPI version"></a>
+  <a href="https://github.com/atengk/mcp-server-rdbms/releases"><img src="https://img.shields.io/github/v/release/atengk/mcp-server-rdbms?style=flat-square&color=blue&label=Release" alt="GitHub Release"></a>
   <a href="https://github.com/atengk/mcp-server-rdbms/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/atengk/mcp-server-rdbms/ci.yml?branch=main&label=CI&style=flat-square" alt="CI Status"></a>
   <a href="https://github.com/atengk/mcp-server-rdbms/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg?style=flat-square" alt="License"></a>
   <a href="https://github.com/atengk/mcp-server-rdbms/actions"><img src="https://img.shields.io/badge/tests-137%20passed-brightgreen.svg?style=flat-square" alt="Tests"></a>
@@ -440,6 +441,14 @@ uv pip install "atengk-mcp-server-rdbms[all]"         # 一键安装所有驱动
    ```json
    {"timestamp":"2026-10-04T08:30:00Z","operation":"sql_dml","db":"pg_main","statements":["UPDATE users SET status = 1 WHERE id = 100"],"status":"SUCCESS","rows_affected":1,"duration_ms":12.5,"error":null}
    ```
+
+---
+
+## 📝 版本更新日志 (Changelog)
+
+本项目采用 [git-cliff](https://github.com/orhun/git-cliff) 基于 Conventional Commits 提交历史全自动生成发版笔记，不维护静态的 `CHANGELOG.md` 物理文件。
+
+所有历史版本的详细改动、新特性与修复记录，请直接访问 [GitHub Releases](https://github.com/atengk/mcp-server-rdbms/releases)。
 
 ---
 

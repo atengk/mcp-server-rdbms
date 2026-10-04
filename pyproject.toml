@@ -1,6 +1,6 @@
 [project]
 name = "atengk-mcp-server-rdbms"
-version = "1.1.1"
+version = "1.1.2"
 description = "Universal Relational Database Model Context Protocol (MCP) Server powered by SQLAlchemy & FastMCP"
 readme = "README.md"
 license = { text = "MIT" }
@@ -35,6 +35,13 @@ all = [
     "pyodbc>=5.0.0",
     "clickhouse-connect>=0.7.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/atengk/mcp-server-rdbms"
+Documentation = "https://github.com/atengk/mcp-server-rdbms#readme"
+Repository = "https://github.com/atengk/mcp-server-rdbms"
+Issues = "https://github.com/atengk/mcp-server-rdbms/issues"
+Changelog = "https://github.com/atengk/mcp-server-rdbms/releases"
 
 [project.scripts]
 atengk-mcp-server-rdbms = "atengk_mcp_server_rdbms:main"

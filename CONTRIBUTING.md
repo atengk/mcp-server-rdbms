@@ -81,14 +81,23 @@
 
 ## 5. 自动化版本发版与更新日志
 
-本项目无需手动编写或维护 `CHANGELOG.md`，全量更新日志与发版说明由 [git-cliff](https://github.com/orhun/git-cliff) 基于 Git Commit 历史自动生成：
+本项目**不维护任何静态的物理 `CHANGELOG.md` 文件**（严禁手动创建或提交该文件），全量更新日志与发版说明 100% 由 [git-cliff](https://github.com/orhun/git-cliff) 基于 Git Commit 历史自动生成：
 
-1. **触发发版**：打上符合语义化版本规范的 Git Tag 并推送到仓库：
+1. **本地即时预览（无需安装）**：
+   本地开发者若需在控制台查看当前或历史全量更新日志，可直接借助 `uvx` 即时运行：
+   ```bash
+   # 预览全量版本历史日志
+   uvx git-cliff
+
+   # 仅提取最新版本的发版笔记
+   uvx git-cliff --latest --strip header
+   ```
+2. **触发全渠道自动化发版**：打上符合语义化版本规范的 Git Tag 并推送到仓库：
    ```bash
    git tag v1.2.0
    git push origin v1.2.0
    ```
-2. **自动化流水线**：
+3. **自动化流水线动作**：
    - GitHub Actions 自动通过 `git-cliff` 提取版本发布笔记；
    - 自动构建标准 Wheel 与 Sdist 并发布到 **PyPI** 官方索引；
    - 自动构建多架构 Docker 镜像并推送至 **GHCR (`ghcr.io`)**；

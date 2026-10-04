@@ -48,6 +48,9 @@
    - `sql_explain` 必须由 `core/guard.py` 的 `validate_explain_query` 进行安全防护。
    - 严格静态拦截 `ANALYZE` 与 `EXECUTE` 危险修饰符（防御 PostgreSQL 等方言中因 `EXPLAIN ANALYZE` 触发真实数据修改）；
    - 自动识别并剥离前置 `EXPLAIN`，并强制内层查询必须通过 AST 深度只读验证。
+8. **变更日志自动化无状态原则 (Zero-Changelog-File Rule)**：
+   - 代码仓库中绝对不保留静态 `CHANGELOG.md` 物理文件，严禁手动创建或提交该文件；
+   - 变更日志 100% 依托 Conventional Commits 规范并通过 `.cliff.toml` 由 GitHub Actions 自动化生成至 GitHub Releases；本地预览统一使用 `uvx git-cliff`。
 
 ---
 
@@ -120,6 +123,7 @@ mcp-server-rdbms: 模块核心职责说明.
 - **提交信息规范**：遵循 Conventional Commits 格式 `<type>(<scope>): <中文描述>`，例如：
   - `feat(guard): 实现基于 sqlglot 的 AST 只读语法树校验与 LIMIT 注入`
   - `fix(connection): 优化缺少数据库驱动时的友好错误拦截提示`
+- **零物理 CHANGELOG 红线**：严禁在仓库中新建或维护物理 `CHANGELOG.md`。版本历史全量由 `.cliff.toml` 自动化提取；本地预览执行 `uvx git-cliff`。
 
 ---
 
