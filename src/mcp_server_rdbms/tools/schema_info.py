@@ -81,50 +81,66 @@ def fetch_tables_summary(
     @param db: 数据库连接别名（可选）
     @return: 包含 tables 与 foreign_keys 的字典载荷
     """
-    # 1. 模式合法性校验与系统模式安全拦截
-    if SchemaFilter.is_system_schema(schema):
-        return TableListResult(schema=schema, tables=[], foreign_keys=[]).to_dict()
-
     engine = registry.get_engine(db)
     inspector = inspect(engine)
     dialect_name = engine.dialect.name
 
-    # 若未显式指定模式，检测当前默认模式是否为系统保留模式
-    effective_schema = schema or inspector.default_schema_name
-    if schema is None and SchemaFilter.is_system_schema(effective_schema):
-        return TableListResult(schema=effective_schema, tables=[], foreign_keys=[]).to_dict()
+    target_schema = schema or inspector.default_schema_name
+    if target_schema is None:
+        # 未选定默认数据库（例如直接连接 MySQL 实例未指定库名）
+        try:
+            available_schemas = [
+                s for s in inspector.get_schema_names()
+                if not SchemaFilter.is_system_schema(s)
+            ]
+            if available_schemas:
+                target_schema = available_schemas[0]
+            else:
+                # 实例无业务数据库或全为保留库，安全返回空集合
+                return TableListResult(schema=None, tables=[], foreign_keys=[]).to_dict()
+        except (SQLAlchemyError, AttributeError, NotImplementedError) as exc:
+            logger.debug("探测可用 schema 失败: %s", exc)
+            return TableListResult(schema=None, tables=[], foreign_keys=[]).to_dict()
+
+    # 1. 模式合法性校验与系统模式安全拦截
+    if SchemaFilter.is_system_schema(target_schema):
+        return TableListResult(schema=target_schema, tables=[], foreign_keys=[]).to_dict()
 
     # 2. 获取并过滤业务数据表列表
-    raw_tables = inspector.get_table_names(schema=schema)
+    try:
+        raw_tables = inspector.get_table_names(schema=target_schema)
+    except (SQLAlchemyError, AttributeError, NotImplementedError) as exc:
+        logger.debug("获取表名列表降级: %s", exc)
+        raw_tables = []
     tables = SchemaFilter.filter_tables(raw_tables, dialect=dialect_name)
 
     tables_list: list[TableSummary] = []
     for tbl in tables:
-        comment = _get_table_comment(inspector, tbl, schema=schema)
+        comment = _get_table_comment(inspector, tbl, schema=target_schema)
         tables_list.append(TableSummary(name=tbl, type="table", comment=comment))
 
     # 3. 按需探测视图清单
     if include_views:
         try:
-            raw_views = inspector.get_view_names(schema=schema)
+            raw_views = inspector.get_view_names(schema=target_schema)
             views = SchemaFilter.filter_tables(raw_views, dialect=dialect_name)
             for view_name in views:
-                view_comment = _get_table_comment(inspector, view_name, schema=schema)
+                view_comment = _get_table_comment(inspector, view_name, schema=target_schema)
                 tables_list.append(TableSummary(name=view_name, type="view", comment=view_comment))
-        except (SQLAlchemyError, NotImplementedError) as exc:
+        except (SQLAlchemyError, AttributeError, NotImplementedError) as exc:
             logger.debug("获取视图清单失败: %s", exc)
 
     # 4. 聚合数据表间外键约束拓扑关系
     fk_list: list[ForeignKeyTopology] = []
     for tbl in tables:
         try:
-            fks = inspector.get_foreign_keys(tbl, schema=schema)
+            fks = inspector.get_foreign_keys(tbl, schema=target_schema)
             for fk in fks:
                 fk_list.append(_convert_foreign_key(fk, tbl))
-        except (SQLAlchemyError, NotImplementedError) as exc:
+        except (SQLAlchemyError, AttributeError, NotImplementedError) as exc:
             logger.debug("获取表 %s 外键拓扑失败: %s", tbl, exc)
 
-    return TableListResult(schema=schema, tables=tables_list, foreign_keys=fk_list).to_dict()
+    return TableListResult(schema=target_schema, tables=tables_list, foreign_keys=fk_list).to_dict()
 
 
 def fetch_table_detail(
@@ -149,12 +165,30 @@ def fetch_table_detail(
     inspector = inspect(engine)
     dialect_name = engine.dialect.name
 
+    lookup_schema = schema
+    if lookup_schema is None and dialect_name == "mysql" and inspector.default_schema_name is None:
+        try:
+            available_schemas = [
+                s for s in inspector.get_schema_names()
+                if not SchemaFilter.is_system_schema(s)
+            ]
+            if available_schemas:
+                lookup_schema = available_schemas[0]
+            else:
+                raise TableNotFoundError(table_name, schema)
+        except (SQLAlchemyError, AttributeError, NotImplementedError):
+            raise TableNotFoundError(table_name, schema)
+
     # 1. 验证目标表或视图是否存在（排除系统保留表）
-    raw_tables = inspector.get_table_names(schema=schema)
+    try:
+        raw_tables = inspector.get_table_names(schema=lookup_schema)
+    except (SQLAlchemyError, AttributeError, NotImplementedError) as exc:
+        logger.debug("获取表名列表失败: %s", exc)
+        raw_tables = []
     all_tables = SchemaFilter.filter_tables(raw_tables, dialect=dialect_name)
     all_views: list[str] = []
     try:
-        raw_views = inspector.get_view_names(schema=schema)
+        raw_views = inspector.get_view_names(schema=lookup_schema)
         all_views = SchemaFilter.filter_tables(raw_views, dialect=dialect_name)
     except (SQLAlchemyError, NotImplementedError) as exc:
         logger.debug("获取视图名称失败: %s", exc)
@@ -165,7 +199,7 @@ def fetch_table_detail(
     # 2. 提取主键约束列
     pk_cols: list[str] = []
     try:
-        pk = inspector.get_pk_constraint(table_name, schema=schema)
+        pk = inspector.get_pk_constraint(table_name, schema=lookup_schema)
         pk_cols = pk.get("constrained_columns", []) or []
     except (SQLAlchemyError, NotImplementedError) as exc:
         logger.debug("获取表 %s 主键约束失败: %s", table_name, exc)
@@ -173,7 +207,7 @@ def fetch_table_detail(
     # 3. 提取列字段定义明细
     col_details: list[ColumnDetail] = []
     try:
-        cols = inspector.get_columns(table_name, schema=schema)
+        cols = inspector.get_columns(table_name, schema=lookup_schema)
         for col in cols:
             is_pk = bool(col.get("primary_key", False)) or (col["name"] in pk_cols)
             col_details.append(
@@ -192,7 +226,7 @@ def fetch_table_detail(
     # 4. 提取外键约束明细
     fk_details: list[ForeignKeyTopology] = []
     try:
-        fks = inspector.get_foreign_keys(table_name, schema=schema)
+        fks = inspector.get_foreign_keys(table_name, schema=lookup_schema)
         for fk in fks:
             fk_details.append(_convert_foreign_key(fk, table_name))
     except (SQLAlchemyError, NotImplementedError) as exc:
@@ -201,7 +235,7 @@ def fetch_table_detail(
     # 5. 提取索引明细
     idx_details: list[IndexDetail] = []
     try:
-        idxs = inspector.get_indexes(table_name, schema=schema)
+        idxs = inspector.get_indexes(table_name, schema=lookup_schema)
         for idx in idxs:
             idx_details.append(
                 IndexDetail(
@@ -214,11 +248,11 @@ def fetch_table_detail(
         logger.debug("获取表 %s 索引明细失败: %s", table_name, exc)
 
     # 6. 读取数据表注释
-    table_comment = _get_table_comment(inspector, table_name, schema=schema)
+    table_comment = _get_table_comment(inspector, table_name, schema=lookup_schema)
 
     return TableDetail(
         table_name=table_name,
-        schema=schema,
+        schema=lookup_schema,
         columns=col_details,
         primary_key=pk_cols,
         foreign_keys=fk_details,
