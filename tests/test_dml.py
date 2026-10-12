@@ -171,3 +171,32 @@ async def test_sql_dml_semicolon_injection_blocked(dml_env):
             {"sql": "UPDATE products SET price = 1 WHERE id = 1; DELETE FROM products WHERE id = 2"},
         )
     assert "单条独立语句" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_sql_dml_trivial_where_blocked(dml_env):
+    make_server, _, _ = dml_env
+    server = make_server(allow_dml=True)
+
+    with pytest.raises(ToolError) as exc_info:
+        await server.call_tool("sql_dml", {"sql": "UPDATE products SET price = 0 WHERE 1 = 1"})
+    assert "恒真" in str(exc_info.value) or "WHERE" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_sql_dml_compound_valid_where_allowed(dml_env):
+    make_server, registry, _ = dml_env
+    server = make_server(allow_dml=True)
+
+    res = await server.call_tool(
+        "sql_dml",
+        {"sql": "UPDATE products SET price = 9.9 WHERE 1 = 1 AND id = 1"},
+    )
+    assert res.structured_content["success"] is True
+    assert res.structured_content["rows_affected"] == 1
+
+    engine = registry.get_engine("default")
+    with engine.connect() as conn:
+        p1 = conn.execute(text("SELECT price FROM products WHERE id = 1")).scalar()
+        assert p1 == 9.9
+

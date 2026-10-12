@@ -108,6 +108,23 @@ _避免使用_: 冗余标签策略 (Redundant Tagging)、单架构打包 (Single
 遵循单一真实数据源 (SSOT) 原则，仅在 `pyproject.toml` 维护版本号，模块顶层通过标准库 `importlib.metadata.version` 动态读取运行时包版本的解耦设计。
 _避免使用_: 硬编码版本 (Hardcoded Version)、双重版本维护 (Dual Version Maintenance)
 
+**恒真条件护栏 (Trivial WHERE Guard)**:
+静态识别并拦截 `1=1`、`true` 等恒真布尔表达式以杜绝伪装条件全表意外篡改或删除的语法树分析机制。
+_避免使用_: 恒等条件过滤器 (Identity Filter)、无意义 WHERE 拦截器 (Meaningless Where Interceptor)
+
+**锁读语句 (Locking Read)**:
+显式携带 `FOR UPDATE` 或 `FOR SHARE` 等行级/表级排他或共享锁修饰以锁定目标记录的查询操作。
+_避免使用_: 加锁查询 (Locked Query)、悲观锁 SQL (Pessimistic SQL)
+
+**复合写操作 (Composite Mutation)**:
+单条语句内聚合匹配、插入与更新多重语义的高级 DML 语法（如 `MERGE INTO`、`REPLACE INTO`）。
+_避免使用_: 混合变更 (Mixed Mutation)、多动作 SQL (Multi-action SQL)
+
+**纵深防御架构 (Defense-in-Depth Architecture)**:
+在 MCP 服务端 AST 静态结构校验与数据库端账号最小只读特权之间形成互补的双层安全边界体系。
+_避免使用_: 混合防御 (Hybrid Defense)、内外安全机制 (Internal-External Security)
+
+
 
 
 

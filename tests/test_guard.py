@@ -138,13 +138,14 @@ def test_dml_dialect_normalization_postgresql():
     assert "WHERE" in stmts[0]
 
 
-def test_dml_merge_statement_blocked():
-    """验证非基础增删改语句（如 MERGE）被拦截."""
+def test_dml_merge_without_on_blocked():
+    """验证 MERGE 语句缺少 ON 关联条件被拦截."""
     with pytest.raises(SecurityViolationError) as exc_info:
         ASTGuard.validate_dml_statements(
-            "MERGE INTO target USING source ON target.id = source.id WHEN MATCHED THEN DELETE"
+            "MERGE INTO target USING source WHEN MATCHED THEN DELETE"
         )
-    assert "仅允许执行数据增删改操作" in str(exc_info.value)
+    assert "ON" in str(exc_info.value)
+
 
 
 @pytest.mark.parametrize(
@@ -211,5 +212,124 @@ def test_validate_explain_query_blocks_analyze_and_mutation():
     # 拦截纯写操作
     with pytest.raises(SecurityViolationError):
         ASTGuard.validate_explain_query("UPDATE users SET name = 'admin'")
+
+
+@pytest.mark.parametrize(
+    "trivial_sql",
+    [
+        "UPDATE users SET name = 'x' WHERE 1 = 1",
+        "UPDATE users SET name = 'x' WHERE true",
+        "UPDATE users SET name = 'x' WHERE TRUE",
+        "UPDATE users SET name = 'x' WHERE 1 = 1 OR 2 = 2",
+        "UPDATE users SET name = 'x' WHERE 'a' = 'a'",
+        "DELETE FROM users WHERE 1 = 1",
+        "DELETE FROM users WHERE (1 = 1)",
+        "DELETE FROM users WHERE 1 = 1 OR status = 'active'",
+    ],
+)
+def test_dml_trivial_where_blocked(trivial_sql: str):
+    """验证 UPDATE 和 DELETE 中完全退化为恒真的伪 WHERE 条件被严密拦截."""
+    with pytest.raises(SecurityViolationError) as exc_info:
+        ASTGuard.validate_dml_statements(trivial_sql)
+    assert "恒真" in str(exc_info.value) or "WHERE" in str(exc_info.value)
+
+
+@pytest.mark.parametrize(
+    "valid_compound_sql",
+    [
+        "UPDATE users SET name = 'x' WHERE 1 = 1 AND id = 5",
+        "UPDATE users SET name = 'x' WHERE id = 5 AND 1 = 1",
+        "DELETE FROM users WHERE 1 = 1 AND status = 'inactive'",
+        "DELETE FROM users WHERE status = 'inactive' AND (1 = 1 AND id > 10)",
+    ],
+)
+def test_dml_compound_valid_where_allowed(valid_compound_sql: str):
+    """验证带有动态脚手架但包含真实列过滤的合法复合条件放行."""
+    safe_stmts = ASTGuard.validate_dml_statements(valid_compound_sql)
+    assert len(safe_stmts) == 1
+    assert "WHERE" in safe_stmts[0]
+
+
+@pytest.mark.parametrize(
+    "locking_sql",
+    [
+        "SELECT * FROM users FOR UPDATE",
+        "SELECT id, name FROM users WHERE id = 1 FOR UPDATE",
+        "SELECT * FROM users FOR SHARE",
+        "SELECT * FROM users FOR UPDATE NOWAIT",
+    ],
+)
+def test_query_locking_reads_blocked(locking_sql: str):
+    """验证只读查询中包含 FOR UPDATE / FOR SHARE 等锁读修饰符被拒绝."""
+    with pytest.raises(SecurityViolationError) as exc_info:
+        ASTGuard.validate_and_rewrite_query(locking_sql)
+    assert "锁读" in str(exc_info.value) or "UPDATE" in str(exc_info.value) or "乐观" in str(exc_info.value)
+
+
+@pytest.mark.parametrize(
+    "dangerous_func_sql",
+    [
+        "SELECT pg_sleep(5)",
+        "SELECT sleep(5)",
+        "SELECT nextval('user_id_seq')",
+        "SELECT setval('user_id_seq', 100)",
+        "SELECT lastval()",
+        "SELECT pg_terminate_backend(12345)",
+        "SELECT pg_cancel_backend(12345)",
+        "SELECT pg_reload_conf()",
+        "SELECT waitfor('00:00:05')",
+    ],
+)
+def test_query_dangerous_functions_blocked(dangerous_func_sql: str):
+    """验证只读查询中包含延时、序列变更及运维进程中断等高危内置函数被拦截."""
+    with pytest.raises(SecurityViolationError) as exc_info:
+        ASTGuard.validate_and_rewrite_query(dangerous_func_sql)
+    assert "高危" in str(exc_info.value) or "副作用" in str(exc_info.value)
+
+
+def test_dml_merge_allowed_with_valid_on():
+    """验证具备有效非恒真 ON 关联条件的 MERGE 语句正常放行."""
+    merge_sql = (
+        "MERGE INTO target USING source ON target.id = source.id "
+        "WHEN MATCHED THEN UPDATE SET val = source.val"
+    )
+    safe_stmts = ASTGuard.validate_dml_statements(merge_sql)
+    assert len(safe_stmts) == 1
+    assert "MERGE" in safe_stmts[0].upper()
+
+
+@pytest.mark.parametrize(
+    "invalid_merge_sql",
+    [
+        "MERGE INTO target USING source ON 1 = 1 WHEN MATCHED THEN UPDATE SET val = source.val",
+        "MERGE INTO target USING source ON true WHEN MATCHED THEN UPDATE SET val = source.val",
+    ],
+)
+def test_dml_merge_trivial_on_blocked(invalid_merge_sql: str):
+    """验证 MERGE 语句中包含恒真 ON 关联条件被强制拦截."""
+    with pytest.raises(SecurityViolationError) as exc_info:
+        ASTGuard.validate_dml_statements(invalid_merge_sql)
+    assert "ON" in str(exc_info.value) and "恒真" in str(exc_info.value)
+
+
+def test_dml_merge_trivial_when_condition_blocked():
+    """验证 MERGE 语句中 WHEN 匹配分支包含恒真过滤条件被拦截."""
+    sql = (
+        "MERGE INTO target USING source ON target.id = source.id "
+        "WHEN MATCHED AND 1 = 1 THEN DELETE"
+    )
+    with pytest.raises(SecurityViolationError) as exc_info:
+        ASTGuard.validate_dml_statements(sql)
+    assert "恒真" in str(exc_info.value)
+
+
+def test_ddl_locking_read_blocked():
+    """验证 DDL 语句中嵌入的锁读修饰符被拒绝."""
+    sql = "CREATE TABLE t AS SELECT * FROM users FOR UPDATE"
+    with pytest.raises(SecurityViolationError) as exc_info:
+        ASTGuard.validate_ddl_statement(sql)
+    assert "锁读" in str(exc_info.value) or "UPDATE" in str(exc_info.value)
+
+
 
 

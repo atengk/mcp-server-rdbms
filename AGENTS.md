@@ -31,6 +31,7 @@
 2. **AST 零绕过只读防御 (Guardrail Rule)**：
    - `sql_query` 在下发到数据库前，**必须**先由 `core/guard.py` 完整解析为 `sqlglot` AST。
    - 验证所有表达式为只读操作（允许并深度解析 `WITH ... SELECT` CTE 语法）；
+   - 彻底禁止锁读修饰符（`FOR UPDATE` / `FOR SHARE`）及高危内置函数（延时、序列变更及运维进程中断）；
    - 若查询未包含 `LIMIT`，强制注入安全截断限制；
    - 严禁拼接多语句（防注入）。
 3. **默认只读与写权限隔离 (Default Read-Only Rule)**：
@@ -38,7 +39,8 @@
    - 仅当启动配置显式激活 `--allow-dml` / `--allow-ddl` 时，对应工具才允许执行；否则一律返回友好权限拒绝提示。
 4. **DML 原子事务与破坏防御 (Atomic & Transactional Rule)**：
    - `sql_dml` 接受单条或列表批量 SQL，**必须**在单一事务块中执行，任何一条语句失败必须全量自动 `ROLLBACK`。
-   - 静态 AST 检测**强制拦截**无 `WHERE` 条件的 `UPDATE` 与 `DELETE` 语句，直接驳回。
+   - 静态 AST 检测**强制拦截**无 `WHERE` 条件或退化为恒真条件（如 `1=1`、`true`）的 `UPDATE` 与 `DELETE` 语句，直接驳回。
+   - 支持复合写 `MERGE` 语句，并强制校验 `ON` 关联条件非空且非恒真。
 5. **变更独立审计落盘 (Audit Trail Rule)**：
    - 任何 `sql_dml` 与 `sql_ddl` 执行，无论成功或抛出异常，均需通过 `core/audit.py` 写入本地 `rdbms_mcp_audit.log`。
 6. **缺失驱动友好拦截 (Fail-Friendly Rule)**：
@@ -64,11 +66,12 @@
 | `db_get_info` | `db_` | 获取方言内核、版本、当前 Schema 与用户 | 只读探查 |
 | `schema_list_tables` | `schema_` | 表/视图清单、注释与外键拓扑关系 | 只读探查，聚合外键关联 |
 | `schema_describe_table` | `schema_` | 列明细、类型、可空性、主键、外键与索引 | 一站式返回全部表元数据 |
-| `sql_query` | `sql_` | 样本预览、数据采样与安全只读分析 | AST 强制只读校验 + 自动 LIMIT |
+| `sql_query` | `sql_` | 样本预览、数据采样与安全只读分析 | AST 强制只读校验 + 自动 LIMIT + 禁锁读与高危函数 |
 | `sql_explain` | `sql_` | 获取执行计划以分析慢查询 | 仅允许执行 EXPLAIN 语句 |
-| `sql_dml` | `sql_` | 数据增删改（支持单条/批量） | `--allow-dml` 门禁 + 原子事务 + 禁无 WHERE |
-| `sql_ddl` | `sql_` | 表结构定义变更（建表/删表/改表） | `--allow-ddl` 门禁 + 显式确认 |
+| `sql_dml` | `sql_` | 数据增删改（支持单条/批量与 MERGE） | `--allow-dml` 门禁 + 原子事务 + 禁无 WHERE 与恒真条件 |
+| `sql_ddl` | `sql_` | 表结构定义变更（建表/删表/改表） | `--allow-ddl` 门禁 + 显式确认 + 禁嵌入锁读 |
 | `admin_list_running_queries` | `admin_` | 观测活动进程与长查询 | 只读观测，对 SQLite 等库优雅降级 |
+
 
 
 ---

@@ -155,3 +155,20 @@ async def test_sql_explain_security_violation(query_setup):
     with pytest.raises(ToolError) as exc_info:
         await server.call_tool("sql_explain", {"sql": "DROP TABLE users"})
     assert "只读" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_sql_query_locking_reads_blocked(query_setup):
+    server, _ = query_setup
+    with pytest.raises(ToolError) as exc_info:
+        await server.call_tool("sql_query", {"sql": "SELECT * FROM users FOR UPDATE"})
+    assert "锁读" in str(exc_info.value) or "UPDATE" in str(exc_info.value) or "乐观" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_sql_query_dangerous_function_blocked(query_setup):
+    server, _ = query_setup
+    with pytest.raises(ToolError) as exc_info:
+        await server.call_tool("sql_query", {"sql": "SELECT sleep(1)"})
+    assert "高危" in str(exc_info.value) or "副作用" in str(exc_info.value)
+
