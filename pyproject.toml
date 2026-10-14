@@ -1,6 +1,6 @@
 [project]
 name = "atengk-mcp-server-rdbms"
-version = "1.2.1"
+version = "1.2.2"
 description = "Universal Relational Database Model Context Protocol (MCP) Server powered by SQLAlchemy & FastMCP"
 
 readme = "README.md"

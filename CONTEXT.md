@@ -180,6 +180,14 @@ _避免使用_: 数据偷窥 (Data Peeking)、小批量抽取 (Small Batch Fetch
 严格以 `MCP_RDBMS_*` 为唯一合法前缀的环境变量体系，彻底排除 `DATABASE_URL`、`PORT`、`HOST` 等通用无前缀变量以物理级防御跨进程配置污染与意外串库。
 _避免使用_: 通用环境变量 (Generic Env)、兼容别名变量 (Alias Env)
 
+**基线运行时锁定 (Baseline Runtime Pinning)**:
+将生产容器镜像与核心构建环境严格固化在受充分验证的长期支持版本（如 Python 3.12-slim），拦截未经广泛驱动兼容测试的早期预览版镜像冒进合入的依赖管控规范。
+_避免使用_: 版本冻结 (Version Freeze)、镜像锁死 (Image Lock)
+
+**协同动作依赖对齐 (Coordinated Action Upgrades)**:
+在 CI/CD 流水线中针对具备强协议握手或状态解包依赖的成对工作流动作（如 upload-artifact 与 download-artifact）实施协同一致性升级，严禁单侧跨大版本孤立升级引发流水线断裂的工程纪律。
+_避免使用_: 单边升级 (Unilateral Upgrade)、动作混用 (Action Mixing)
+
 
 
 
