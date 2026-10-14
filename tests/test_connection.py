@@ -83,3 +83,22 @@ def test_close_all_cleans_engines():
 
     registry.close_all()
     assert len(registry._engines) == 0
+
+
+def test_connection_not_found_contains_available_profiles_and_hint():
+    """测试未找到连接时，错误信息包含当前可用列表与 rdbms://connections 自愈指引."""
+    from atengk_mcp_server_rdbms.core.exceptions import ConnectionNotFoundError
+
+    registry = ConnectionRegistry()
+    registry.register_url("sqlite:///:memory:", name="dev")
+    registry.register_url("sqlite:///:memory:", name="prod")
+
+    with pytest.raises(ConnectionNotFoundError) as exc_info:
+        registry.get_profile("non_existent")
+
+    err = str(exc_info.value)
+    assert "non_existent" in err
+    assert "dev" in err and "prod" in err
+    assert "rdbms://connections" in err
+    assert "自愈指引" in err
+

@@ -90,7 +90,7 @@ flowchart TD
 | **`db_`** | `db_info` | `(db: str = None)` | 一站式探查数据库内核版本、当前 Schema/用户、只读保护及全部已配置连接别名列表（密码强制 `***` 掩码脱敏） |
 | **`schema_`** | `schema_list_tables` | `(schema=None, pattern=None, include_views=False, include_foreign_keys=False, db=None)` | 获取业务数据表与视图清单、表注释并支持模式过滤与可选外键依赖拓扑分析。自动过滤数据库系统保留模式 |
 | | `schema_describe_table` | `(table_name: str, schema=None, db=None)` | 一站式全息探查数据表列明细（类型、可空性、默认值）、主键约束、外键关联与全部索引明细 |
-| **`sql_`** | `sql_query` | `(sql: str, limit: int = 100, format="json", explain: bool = False, db=None)` | 安全只读数据采样与业务分析，支持复杂 CTE `WITH` 语法。支持 `json` / `markdown` / `csv` 格式、自动截断长文本并注入 LIMIT；`explain=True` 时内生获取执行计划 |
+| **`sql_`** | `sql_query` | `(sql: str, limit: int = 100, format="json", explain: bool = False, db=None)` | 安全只读数据采样与业务分析，支持复杂 CTE `WITH` 语法。支持 `json` / `markdown` / `csv` 格式、长文本自动截断、`truncated` 截断状态标注与自愈型重定向指引；`explain=True` 时内生获取执行计划 |
 | | `sql_dml` | `(sql: str \| list[str], db=None)` | 原子事务数据增删改（支持单条或批量）。**单步失败全量自动回滚**，受 `--allow-dml` 门禁管控，**强制拦截无 WHERE 条件操作** |
 | | `sql_ddl` | `(sql: str, confirm: bool = False, db=None)` | 结构定义变更（建表、删表、改表）。受 `--allow-ddl` 权限管控并要求 `confirm=True` 二次确认 |
 
@@ -214,24 +214,26 @@ uv run atengk-mcp-server-rdbms --db-url "sqlite:///./demo.db"
 
 ### 🌐 环境变量完整速查矩阵 (12-Factor App)
 
-服务提供官方推荐前缀 `MCP_RDBMS_*` 与通用标准环境变量双重支持：
+服务严格采用专属命名空间 `MCP_RDBMS_*`，杜绝通用无前缀变量以彻底消灭环境污染与串库风险：
 
-| 分类 | 推荐主环境变量 | 宽容兼容变量 | 默认值 / 行为说明 |
-| :--- | :--- | :--- | :--- |
-| **完整连接** | `MCP_RDBMS_DB_URL` | `DATABASE_URL` | 完整 RFC 1738 连接串（如 `sqlite:///:memory:`） |
-| **多库配置** | `MCP_RDBMS_CONFIG` | `CONFIG_FILE` | 多数据源 YAML 配置文件绝对路径 |
-| **数据库方言** | `MCP_RDBMS_DIALECT` | `DB_DIALECT` | 数据库类型（`mysql`, `postgresql`, `oracle`, `mssql`, `sqlite` 等） |
-| **主机地址** | `MCP_RDBMS_DB_HOST` | `DB_HOST` | 数据库主机 IP 或域名（默认: `127.0.0.1`） |
-| **端口** | `MCP_RDBMS_DB_PORT` | `DB_PORT` | 数据库端口（缺省按方言自适应推导，如 MySQL 3306, PG 5432） |
-| **用户名** | `MCP_RDBMS_USER` | `DB_USER` / `DB_USERNAME` | 数据库登录用户 |
-| **密码** | `MCP_RDBMS_PASSWORD` | `DB_PASSWORD` / `DB_PASS` | **明文自动 URL 安全编码（如 `@` -> `%40`，彻底防踩坑）** |
-| **数据库名称** | `MCP_RDBMS_DATABASE` | `DB_NAME` / `DB_DATABASE` | 目标数据库/Schema 库名 |
-| **附加参数** | `MCP_RDBMS_PARAMS` | `DB_PARAMS` | 连接查询参数（如 `charset=utf8mb4`） |
-| **增删改权限** | `MCP_RDBMS_ALLOW_DML`| `MCP_ALLOW_DML` | 宽容布尔值（`1`, `true`, `yes`, `on`, `t` 大小写不敏感） |
-| **表结构变更** | `MCP_RDBMS_ALLOW_DDL`| `MCP_ALLOW_DDL` | 宽容布尔值（`1`, `true`, `yes`, `on`, `t` 大小写不敏感） |
-| **通信传输协议** | `MCP_RDBMS_TRANSPORT`| `MCP_TRANSPORT` | `stdio`（默认）、`sse`、`streamable-http` |
-| **服务监听地址** | `MCP_RDBMS_SERVER_HOST` | `HOST` | SSE/HTTP 监听地址（默认: `127.0.0.1`） |
-| **服务监听端口** | `MCP_RDBMS_SERVER_PORT` | `PORT` | SSE/HTTP 监听端口（默认: `8000`） |
+| 分类 | 专属环境变量 (MCP_RDBMS_*) | 默认值 / 行为说明 |
+| :--- | :--- | :--- |
+| **完整连接** | `MCP_RDBMS_DB_URL` | 完整 RFC 1738 连接串（如 `sqlite:///:memory:`） |
+| **零配置多库** | `MCP_RDBMS_DB_<ALIAS>` | 动态多库注入（如 `MCP_RDBMS_DB_DEV=...`、`MCP_RDBMS_DB_PROD=...`，免物理文件） |
+| **默认数据库** | `MCP_RDBMS_DEFAULT_DB` | 多库环境下显式指定默认库别名（如 `dev`） |
+| **多库配置文件** | `MCP_RDBMS_CONFIG` | 多数据源 YAML 配置文件绝对路径 |
+| **数据库方言** | `MCP_RDBMS_DIALECT` | 数据库类型（`mysql`, `postgresql`, `oracle`, `mssql`, `sqlite` 等） |
+| **主机地址** | `MCP_RDBMS_DB_HOST` | 数据库主机 IP 或域名（默认: `127.0.0.1`） |
+| **端口** | `MCP_RDBMS_DB_PORT` | 数据库端口（缺省按方言自适应推导，如 MySQL 3306, PG 5432） |
+| **用户名** | `MCP_RDBMS_USER` | 数据库登录用户 |
+| **密码** | `MCP_RDBMS_PASSWORD` | **明文自动 URL 安全编码（如 `@` -> `%40`，彻底防踩坑）** |
+| **数据库名称** | `MCP_RDBMS_DATABASE` | 目标数据库/Schema 库名 |
+| **附加参数** | `MCP_RDBMS_PARAMS` | 连接查询参数（如 `charset=utf8mb4`） |
+| **增删改权限** | `MCP_RDBMS_ALLOW_DML` | 宽容布尔值（`1`, `true`, `yes`, `on`, `t` 大小写不敏感） |
+| **表结构变更** | `MCP_RDBMS_ALLOW_DDL` | 宽容布尔值（`1`, `true`, `yes`, `on`, `t` 大小写不敏感） |
+| **通信传输协议** | `MCP_RDBMS_TRANSPORT` | `stdio`（默认）、`sse`、`streamable-http` |
+| **服务监听地址** | `MCP_RDBMS_SERVER_HOST` | SSE/HTTP 监听地址（默认: `127.0.0.1`） |
+| **服务监听端口** | `MCP_RDBMS_SERVER_PORT` | SSE/HTTP 监听端口（默认: `8000`） |
 
 > 📌 **解析优先级规则**：`命令行参数 (最高)` > `全量 URL 环境变量` > `独立字段环境变量拼装` > `标准内置默认值`。本地执行时会自动探测读取同级目录下的 `.env` 文件。
 

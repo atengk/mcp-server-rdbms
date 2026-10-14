@@ -87,18 +87,17 @@ def parse_bool_env(value: str | None) -> bool:
     return value.strip().lower() in TRUE_BOOLEAN_STRINGS
 
 
-def get_first_env(keys: list[str], env: Mapping[str, str] | None = None) -> str | None:
-    """按优先级顺序获取首个非空环境变量.
+def get_env(key: str, env: Mapping[str, str] | None = None) -> str | None:
+    """按单一标准键获取环境变量（严格专属命名空间，无兼容别名）.
 
-    @param keys: 环境变量候选键名列表
+    @param key: 环境变量名（必须为 MCP_RDBMS_* 前缀规范键）
     @param env: 环境变量映射源，缺省时使用 os.environ
-    @return: 命中且非空的值，若均未命中返回 None
+    @return: 命中且非空的值，未命中或空白时返回 None
     """
     source = os.environ if env is None else env
-    for key in keys:
-        val = source.get(key)
-        if val is not None and val.strip() != "":
-            return val.strip()
+    val = source.get(key)
+    if val is not None and val.strip() != "":
+        return val.strip()
     return None
 
 
@@ -106,7 +105,7 @@ def assemble_db_url_from_env(env: Mapping[str, str] | None = None) -> str | None
     """环境自动拼装器：从环境变量自动组合数据库连接串.
 
     优先级与规则：
-    1. 完整连接串：优先 MCP_RDBMS_DB_URL，兼容 DATABASE_URL。
+    1. 完整连接串：优先 MCP_RDBMS_DB_URL；
     2. 原子字段拼装：当提供了方言、主机、端口、用户名、密码或库名等任意明确线索时触发组合。
        针对密码中的特殊字符（@, #, :, /, 空格等）自动执行 RFC 1738 安全转义（空格转为 %20），避免手动编码。
 
@@ -115,19 +114,19 @@ def assemble_db_url_from_env(env: Mapping[str, str] | None = None) -> str | None
     """
     source = os.environ if env is None else env
 
-    # 1. 优先提取完整 URL
-    full_url = get_first_env(["MCP_RDBMS_DB_URL", "DATABASE_URL"], env=source)
+    # 1. 优先提取完整 URL（严格限定专属命名空间 MCP_RDBMS_DB_URL）
+    full_url = get_env("MCP_RDBMS_DB_URL", env=source)
     if full_url:
         return full_url
 
-    # 2. 提取原子字段（严格隔离数据库字段与服务监听字段）
-    dialect_raw = get_first_env(["MCP_RDBMS_DIALECT", "DB_DIALECT"], env=source)
-    host = get_first_env(["MCP_RDBMS_DB_HOST", "DB_HOST"], env=source)
-    port_str = get_first_env(["MCP_RDBMS_DB_PORT", "DB_PORT"], env=source)
-    user = get_first_env(["MCP_RDBMS_USER", "DB_USER", "DB_USERNAME"], env=source)
-    password = get_first_env(["MCP_RDBMS_PASSWORD", "DB_PASSWORD", "DB_PASS"], env=source)
-    database = get_first_env(["MCP_RDBMS_DATABASE", "DB_NAME", "DB_DATABASE"], env=source)
-    params = get_first_env(["MCP_RDBMS_PARAMS", "DB_PARAMS"], env=source)
+    # 2. 提取原子字段（严格限定专属命名空间 MCP_RDBMS_*，杜绝通用无前缀变量）
+    dialect_raw = get_env("MCP_RDBMS_DIALECT", env=source)
+    host = get_env("MCP_RDBMS_DB_HOST", env=source)
+    port_str = get_env("MCP_RDBMS_DB_PORT", env=source)
+    user = get_env("MCP_RDBMS_USER", env=source)
+    password = get_env("MCP_RDBMS_PASSWORD", env=source)
+    database = get_env("MCP_RDBMS_DATABASE", env=source)
+    params = get_env("MCP_RDBMS_PARAMS", env=source)
 
     # 若没有任何字段线索，直接返回 None
     if not any([dialect_raw, host, port_str, user, password, database]):
@@ -180,13 +179,60 @@ def assemble_db_url_from_env(env: Mapping[str, str] | None = None) -> str | None
     return f"{driver}://{auth_part}{target_host}:{target_port}/{db_part}{query_part}"
 
 
+RESERVED_DB_ENV_SUFFIXES: frozenset[str] = frozenset({
+    "URL", "HOST", "PORT", "USER", "USERNAME", "PASSWORD", "PASS", "DATABASE", "NAME", "DIALECT", "PARAMS",
+})
+
+
+def extract_multi_db_urls_from_env(
+    env: Mapping[str, str] | None = None,
+) -> tuple[dict[str, str], str | None]:
+    """从环境变量中动态提取多数据库连接与默认库配置（零文件多环境支持）.
+
+    匹配规范：
+    1. 动态前缀规则：匹配形如 MCP_RDBMS_DB_<ALIAS>=<URL> 的环境变量（排除 HOST、PORT、USER 等原子保留词）；
+    2. 键值列表规则：兼容 MCP_RDBMS_DBS="alias1=url1,alias2=url2" 逗号分隔配置；
+    3. 默认库标识：读取 MCP_RDBMS_DEFAULT_DB 或 DEFAULT_DB。
+
+    @param env: 环境变量映射源，缺省时使用 os.environ
+    @return: (多连接字典 {alias: url}, 默认库别名 or None)
+    """
+    source = os.environ if env is None else env
+    conns: dict[str, str] = {}
+
+    # 1. 扫描动态前缀 MCP_RDBMS_DB_<ALIAS>
+    prefix = "MCP_RDBMS_DB_"
+    for key, val in source.items():
+        if key.startswith(prefix) and val and val.strip():
+            suffix = key[len(prefix):].strip()
+            if suffix.upper() not in RESERVED_DB_ENV_SUFFIXES:
+                alias = suffix.lower()
+                conns[alias] = val.strip()
+
+    # 2. 扫描聚合字符串 MCP_RDBMS_DBS
+    dbs_agg = get_env("MCP_RDBMS_DBS", env=source)
+    if dbs_agg:
+        for item in dbs_agg.split(","):
+            if "=" in item:
+                k, _, v = item.partition("=")
+                k_clean = k.strip().lower()
+                v_clean = v.strip()
+                if k_clean and v_clean:
+                    conns[k_clean] = v_clean
+
+    default_db = get_env("MCP_RDBMS_DEFAULT_DB", env=source)
+    default_db_clean = default_db.strip().lower() if default_db else None
+
+    return conns, default_db_clean
+
+
 def resolve_runtime_config(
     args: argparse.Namespace | None = None,
     env: Mapping[str, str] | None = None,
 ) -> ServerRuntimeConfig:
     """分层解析服务器全量运行时配置.
 
-    优先级契约：命令行参数 > 环境变量 > 默认规范值.
+    优先级契约：命令行参数 > 环境变量 (严格 MCP_RDBMS_* 单一命名空间) > 默认规范值.
 
     @param args: 命令行参数对象，若为 None 则全部由环境变量/默认值推导
     @param env: 环境变量映射源，缺省时使用 os.environ
@@ -205,29 +251,30 @@ def resolve_runtime_config(
     arg_host = getattr(args, "host", None) if args else None
     arg_port = getattr(args, "port", None) if args else None
 
-    config_file = arg_config or get_first_env(["MCP_RDBMS_CONFIG", "CONFIG_FILE"], env=source)
+    config_file = arg_config or get_env("MCP_RDBMS_CONFIG", env=source)
     db_url = arg_db_url or assemble_db_url_from_env(env=source)
+    multi_db_urls, default_db = extract_multi_db_urls_from_env(env=source)
 
     allow_dml = arg_allow_dml or parse_bool_env(
-        get_first_env(["MCP_RDBMS_ALLOW_DML", "MCP_ALLOW_DML"], env=source)
+        get_env("MCP_RDBMS_ALLOW_DML", env=source)
     )
     allow_ddl = arg_allow_ddl or parse_bool_env(
-        get_first_env(["MCP_RDBMS_ALLOW_DDL", "MCP_ALLOW_DDL"], env=source)
+        get_env("MCP_RDBMS_ALLOW_DDL", env=source)
     )
 
     transport = (
         arg_transport
-        or get_first_env(["MCP_RDBMS_TRANSPORT", "MCP_TRANSPORT"], env=source)
+        or get_env("MCP_RDBMS_TRANSPORT", env=source)
         or "stdio"
     )
 
     host = (
         arg_host
-        or get_first_env(["MCP_RDBMS_SERVER_HOST", "HOST"], env=source)
+        or get_env("MCP_RDBMS_SERVER_HOST", env=source)
         or "127.0.0.1"
     )
 
-    port_env_str = get_first_env(["MCP_RDBMS_SERVER_PORT", "PORT"], env=source)
+    port_env_str = get_env("MCP_RDBMS_SERVER_PORT", env=source)
     if arg_port is not None:
         port = arg_port
     elif port_env_str:
@@ -246,4 +293,6 @@ def resolve_runtime_config(
         transport=transport,
         host=host,
         port=port,
+        multi_db_urls=multi_db_urls,
+        default_db=default_db,
     )

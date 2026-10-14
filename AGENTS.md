@@ -24,15 +24,16 @@
 
 ## 2. 不可违背的核心不变量 (Core Invariants)
 
-在编写、重构或调试代码时，必须无条件遵循以下 8 大核心不变量：
+在编写、重构或调试代码时，必须无条件遵循以下 10 大核心不变量：
 
 1. **异步事件循环防阻塞 (Offload Rule)**：
    - FastMCP 运行在异步事件循环中，而 SQLAlchemy 引擎采用标准同步模式；
    - 所有数据库 I/O 与元数据探查**必须**通过 `anyio.to_thread.run_sync` 卸载至工作线程池，严禁在异步工具函数中直接执行同步阻塞 I/O。
-2. **AST 零绕过只读防御 (Guardrail Rule)**：
+2. **AST 零绕过只读防御与自愈重定向 (Guardrail Rule)**：
    - `sql_query` 在下发到数据库前，**必须**先由 `core/guard.py` 解析为 `sqlglot` AST；
    - 验证所有表达式为只读操作（允许并深度解析 `WITH ... SELECT` CTE 语法）；
    - 严格拦截锁读修饰符（`FOR UPDATE` / `FOR SHARE`）及高危内置函数（延时、序列变更及运维进程中断）；
+   - 拦截写入与 DDL 操作时，**强制附带自愈重定向指引**（提示改用 `sql_dml` / `sql_ddl` 及所需启动权限），赋能智能体零耗损自主重试；
    - 若查询未包含 `LIMIT`，强制注入安全截断限制（默认 100 行）；
    - 严禁拼接多语句（防御 SQL 注入）。
 3. **默认只读与写权限隔离 (Default Read-Only Rule)**：
@@ -57,6 +58,10 @@
 9. **合规开源协议与作者脱敏 (License & Identity Invariant)**：
    - 本项目基于 **Apache License 2.0** 与配套 `NOTICE` 文件开源；
    - 遵循版权与隐私规范：新建文件类头统一署名 `@author Ateng` 与 `@since YYYY-MM-DD`，严禁在代码、文档、提交信息或测试中混入真实姓名。
+10. **专属环境命名空间 (Dedicated Namespace Rule)**：
+   - 配置解析层严格只识别以 `MCP_RDBMS_*` 为唯一规范前缀的全大写环境变量；
+   - 严禁读取宿主系统的通用无前缀别名（如 `DATABASE_URL`、`HOST`、`PORT`、`DB_*`、`CONFIG_FILE` 等），物理级防御跨进程环境污染与意外串库；
+   - 动态多库通过 `MCP_RDBMS_DB_<ALIAS>` 注入，默认库由 `MCP_RDBMS_DEFAULT_DB` 显式声明。
 
 ---
 

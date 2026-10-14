@@ -52,12 +52,12 @@ def test_build_registry_from_db_url():
     assert profile.name == "default"
 
 
-def test_build_registry_from_env_var():
+def test_build_registry_from_env_var_ignored_without_prefix():
+    """验证未带规范前缀的通用环境变量 DATABASE_URL 被严格忽略."""
     args = parse_args([])
-    with patch.dict(os.environ, {"DATABASE_URL": "sqlite:///:memory:"}):
+    with patch.dict(os.environ, {"DATABASE_URL": "sqlite:///:memory:"}, clear=True):
         registry = build_registry_from_args(args)
-        assert len(registry.list_profiles()) == 1
-        assert registry.get_profile().url == "sqlite:///:memory:"
+        assert len(registry.list_profiles()) == 0
 
 
 def test_build_registry_from_mcp_rdbms_db_url():

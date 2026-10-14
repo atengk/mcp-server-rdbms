@@ -75,6 +75,11 @@ def parse_args(args: list[str] | None = None) -> argparse.Namespace:
 def build_registry(cfg: ServerRuntimeConfig) -> ConnectionRegistry:
     """根据运行时解析配置构建连接注册表.
 
+    优先级与规则：
+    1. 配置文件优先：若指定 config_file，从文件加载全量配置；
+    2. 环境变量多库优先：若存在 multi_db_urls，动态批量注册并设置 default_db；
+    3. 单连接兜底：若存在 db_url，注册为 default 连接。
+
     @param cfg: 服务器运行时配置实体
     @return: 初始化就绪的 ConnectionRegistry
     """
@@ -82,7 +87,23 @@ def build_registry(cfg: ServerRuntimeConfig) -> ConnectionRegistry:
         return ConnectionRegistry.from_file(cfg.config_file)
 
     registry = ConnectionRegistry()
-    if cfg.db_url:
+
+    # 1. 优先加载环境变量注入的多数据库配置 (MCP_RDBMS_DB_<ALIAS>)
+    if cfg.multi_db_urls:
+        for alias, url in cfg.multi_db_urls.items():
+            is_default = (alias == cfg.default_db)
+            registry.register_url(url, name=alias, is_default=is_default)
+
+        # 若显式指定了 default_db 且在注册列表中，锁定为默认
+        if cfg.default_db and cfg.default_db in registry._profiles:
+            registry._default_alias = cfg.default_db
+        elif "default" in registry._profiles:
+            registry._default_alias = "default"
+        elif registry._profiles and registry._default_alias is None:
+            registry._default_alias = next(iter(registry._profiles.keys()))
+
+    # 2. 单连接配置（兼容 MCP_RDBMS_DB_URL 与原子字段拼装）
+    elif cfg.db_url:
         registry.register_url(cfg.db_url, name="default", is_default=True)
 
     return registry

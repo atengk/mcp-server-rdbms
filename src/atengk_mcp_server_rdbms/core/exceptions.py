@@ -26,9 +26,19 @@ class ConnectionNotFoundError(RdbmsMcpError):
     @since 2026-10-04
     """
 
-    def __init__(self, connection_name: str) -> None:
-        super().__init__(f"未找到指定的数据库连接配置: '{connection_name}'")
+    def __init__(
+        self,
+        connection_name: str,
+        available_profiles: list[str] | None = None,
+    ) -> None:
         self.connection_name = connection_name
+        self.available_profiles = available_profiles or []
+        avail_hint = (
+            f"。当前已注册可用连接清单: {self.available_profiles}。💡 自愈指引：请通过 db 参数指定有效连接别名，或读取 MCP 只读资源 rdbms://connections 预先查看已配置连接。"
+            if self.available_profiles
+            else "。"
+        )
+        super().__init__(f"未找到指定的数据库连接配置: '{connection_name}'{avail_hint}")
 
 
 class TableNotFoundError(RdbmsMcpError):

@@ -39,20 +39,15 @@ def test_parse_bool_env():
 
 
 def test_assemble_db_url_prioritizes_full_url():
-    """测试全量 URL 变量优先级最高."""
+    """测试全量 MCP_RDBMS_DB_URL 变量优先级最高，且忽略通用 DATABASE_URL."""
     env = {
         "MCP_RDBMS_DB_URL": "mysql+pymysql://custom:pass@1.2.3.4:3306/db1",
-        "DATABASE_URL": "postgresql://pg:pass@localhost/pgdb",
-        "DB_HOST": "9.9.9.9",
+        "DATABASE_URL": "postgresql://pg:pass@localhost/pgdb",  # 兼容变量已废除，应被忽略
     }
     assert assemble_db_url_from_env(env) == "mysql+pymysql://custom:pass@1.2.3.4:3306/db1"
 
-    # 回退到 DATABASE_URL
-    env_fallback = {
-        "DATABASE_URL": "postgresql://pg:pass@localhost/pgdb",
-        "DB_HOST": "9.9.9.9",
-    }
-    assert assemble_db_url_from_env(env_fallback) == "postgresql://pg:pass@localhost/pgdb"
+    # 验证仅有 DATABASE_URL 时不会被读取
+    assert assemble_db_url_from_env({"DATABASE_URL": "postgresql://pg:pass@localhost/pgdb"}) is None
 
 
 def test_assemble_db_url_with_special_character_password():
@@ -67,7 +62,6 @@ def test_assemble_db_url_with_special_character_password():
         "MCP_RDBMS_PARAMS": "charset=utf8mb4",
     }
     url = assemble_db_url_from_env(env)
-    # @ 编码为 %40, # 编码为 %23, $ 保持或编码, / 为 %2F, : 为 %3A, ? 为 %3F
     assert url is not None
     assert "Admin%40123%23%24%2F%3A%3F" in url or "Admin%40123%23" in url
     assert url.startswith("mysql+pymysql://root:")
@@ -77,11 +71,11 @@ def test_assemble_db_url_with_special_character_password():
 def test_assemble_db_url_prevents_double_encoding():
     """测试已手动编码的密码防止二次编码为 %25."""
     env = {
-        "DB_DIALECT": "mysql",
-        "DB_USER": "root",
-        "DB_PASSWORD": "Admin%40123%23",
-        "DB_HOST": "localhost",
-        "DB_NAME": "test",
+        "MCP_RDBMS_DIALECT": "mysql",
+        "MCP_RDBMS_USER": "root",
+        "MCP_RDBMS_PASSWORD": "Admin%40123%23",
+        "MCP_RDBMS_DB_HOST": "localhost",
+        "MCP_RDBMS_DATABASE": "test",
     }
     url = assemble_db_url_from_env(env)
     assert url is not None
@@ -93,9 +87,9 @@ def test_assemble_db_url_postgresql_defaults():
     """测试 PostgreSQL 方言与默认端口推断."""
     env = {
         "MCP_RDBMS_DIALECT": "postgres",
-        "DB_USER": "postgres",
-        "DB_PASSWORD": "secret_password",
-        "DB_NAME": "analytics",
+        "MCP_RDBMS_USER": "postgres",
+        "MCP_RDBMS_PASSWORD": "secret_password",
+        "MCP_RDBMS_DATABASE": "analytics",
     }
     url = assemble_db_url_from_env(env)
     assert url == "postgresql+psycopg://postgres:secret_password@127.0.0.1:5432/analytics"
@@ -169,7 +163,7 @@ def test_resolve_runtime_config_hierarchy():
     env = {
         "MCP_RDBMS_TRANSPORT": "sse",
         "MCP_RDBMS_SERVER_HOST": "0.0.0.0",
-        "PORT": "9000",
+        "MCP_RDBMS_SERVER_PORT": "9000",
         "MCP_RDBMS_ALLOW_DML": "false",
         "MCP_RDBMS_ALLOW_DDL": "false",
     }
@@ -208,6 +202,37 @@ def test_resolve_runtime_config_hierarchy():
     assert cfg_default.allow_ddl is False
 
 
+def test_strict_namespace_ignores_unprefixed_env():
+    """测试系统通用无前缀环境变量被 100% 物理隔离忽略，杜绝串库与配置污染."""
+    unprefixed_env = {
+        "DATABASE_URL": "postgresql://hacker:pass@evil.com/leak",
+        "HOST": "10.0.0.99",
+        "PORT": "9999",
+        "DB_HOST": "10.0.0.88",
+        "DB_USER": "root",
+        "DB_PASSWORD": "password",
+        "CONFIG_FILE": "/etc/shadow",
+        "DEFAULT_DB": "evil_db",
+        "MCP_ALLOW_DML": "true",
+        "MCP_ALLOW_DDL": "true",
+        "MCP_TRANSPORT": "sse",
+    }
+    # 验证 URL 拼装不读取任何无前缀变量
+    assert assemble_db_url_from_env(unprefixed_env) is None
+
+    # 验证运行时配置不读取任何无前缀变量
+    cfg = resolve_runtime_config(args=None, env=unprefixed_env)
+    assert cfg.config_file is None
+    assert cfg.db_url is None
+    assert cfg.transport == "stdio"
+    assert cfg.host == "127.0.0.1"
+    assert cfg.port == 8000
+    assert cfg.allow_dml is False
+    assert cfg.allow_ddl is False
+    assert cfg.default_db is None
+
+
+
 def test_load_dotenv_if_exists(tmp_path):
     """测试自适应加载本地 .env 文件且不覆盖既有环境变量."""
     dotenv_file = tmp_path / ".env"
@@ -233,3 +258,44 @@ def test_load_dotenv_if_exists(tmp_path):
         os.environ.pop("TEST_NEW_KEY", None)
         os.environ.pop("TEST_QUOTED_KEY", None)
         os.environ.pop("TEST_EXISTING_KEY", None)
+
+
+def test_extract_multi_db_urls_from_env():
+    """测试从环境变量提取多数据库连接与默认库配置."""
+    from atengk_mcp_server_rdbms.core.env import extract_multi_db_urls_from_env
+
+    env = {
+        "MCP_RDBMS_DB_DEV": "mysql+pymysql://root:pass@localhost:3306/dev_db",
+        "MCP_RDBMS_DB_PROD": "postgresql+psycopg://postgres:pass@remote:5432/prod_db",
+        "MCP_RDBMS_DEFAULT_DB": "prod",
+        "MCP_RDBMS_DB_HOST": "127.0.0.1",  # 保留关键字，不应被当作别名
+        "MCP_RDBMS_DB_PORT": "3306",       # 保留关键字
+    }
+    conns, default_alias = extract_multi_db_urls_from_env(env)
+    assert len(conns) == 2
+    assert conns["dev"] == "mysql+pymysql://root:pass@localhost:3306/dev_db"
+    assert conns["prod"] == "postgresql+psycopg://postgres:pass@remote:5432/prod_db"
+    assert default_alias == "prod"
+
+
+def test_build_registry_with_multi_db_env():
+    """测试 build_registry 通过环境变量多库与默认库正确装配连接注册表."""
+    from atengk_mcp_server_rdbms.cli import build_registry
+
+    env = {
+        "MCP_RDBMS_DB_PRIMARY": "sqlite:///:memory:",
+        "MCP_RDBMS_DB_ANALYTICS": "sqlite:///:memory:",
+        "MCP_RDBMS_DEFAULT_DB": "analytics",
+    }
+    cfg = resolve_runtime_config(args=None, env=env)
+    assert cfg.default_db == "analytics"
+    assert len(cfg.multi_db_urls) == 2
+
+    registry = build_registry(cfg)
+    assert registry.default_alias == "analytics"
+    profiles = {p.name: p for p in registry.list_profiles()}
+    assert "primary" in profiles
+    assert "analytics" in profiles
+    assert profiles["analytics"].is_default is True
+    assert profiles["primary"].is_default is False
+

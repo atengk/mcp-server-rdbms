@@ -65,6 +65,20 @@ jobs:
       - name: 执行全量回归单元测试
         run: uv run pytest -s
 
+      - name: 校验 Git Tag 与 pyproject.toml 版本一致性
+        run: |
+          RAW_REF="${{ github.event.inputs.version || github.ref_name }}"
+          CLEAN_VERSION="${RAW_REF#v}"
+          PYPROJECT_VERSION=$(grep '^version = ' pyproject.toml | head -n 1 | sed -E 's/version = "(.*)"/\1/')
+          echo "触发发布版本: ${CLEAN_VERSION}"
+          echo "pyproject.toml 声明版本: ${PYPROJECT_VERSION}"
+          if [ "${CLEAN_VERSION}" != "${PYPROJECT_VERSION}" ]; then
+            echo "::error::[版本不一致] 发布标签 (${CLEAN_VERSION}) 与 pyproject.toml 声明版本 (${PYPROJECT_VERSION}) 不匹配！"
+            echo "💡 请修改 pyproject.toml 中的 version 字段使其与发布 Tag 完全一致后再行发版。"
+            exit 1
+          fi
+          echo "✅ 版本一致性校验通过: ${CLEAN_VERSION}"
+
   # ----------------------------------------------------------------------------
   # Job 2: 编译发行制品并计算不可变校验和 (Build Once)
   # ----------------------------------------------------------------------------

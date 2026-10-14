@@ -21,6 +21,7 @@ class QueryResult:
     format: Literal["json", "markdown", "csv"]
     data: list[dict[str, Any]] | str
     columns: list[str] = field(default_factory=list)
+    truncated: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         """转换为标准字典载荷."""

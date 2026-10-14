@@ -164,6 +164,24 @@ _避免使用_: 提交拦截器 (Commit Blocker)、信息验证器 (Message Vali
 基于 Apache License 2.0 构建的开源法律授权体系，提供显式专利授权与专利反诉自动终止条款，保障原作者与采用者法律安全。
 _避免使用_: 基础开源协议 (Basic License)、通用授权 (General License)
 
+**自愈型拦截重定向 (Self-Healing Remediation)**:
+在安全守卫拦截非法操作（如只读通道误入写语句）时，主动在错误载荷中输出下一跳适配工具与权限指引以赋能大模型自主纠偏的机制。
+_避免使用_: 错误回显 (Error Echo)、错误增强 (Error Augmentation)
+
+**零配置多库注入 (Zero-Config Multi-DB)**:
+无需在本地创建物理配置文件，直接通过 `MCP_RDBMS_DB_<ALIAS>` 与 `MCP_RDBMS_DEFAULT_DB` 环境变量完成多数据库实例声明与默认库绑定的轻量注入机制。
+_避免使用_: 环境变量魔改 (Env Hacking)、动态数据源注入 (Dynamic Source Injection)
+
+**微采样引导 (Micro-Sampling Guidance)**:
+在工具契约中主动向大模型传达针对未知宽表使用极小 LIMIT（3~5 行）探查数据结构的节制使用心智，防范上下文溢出。
+_避免使用_: 数据偷窥 (Data Peeking)、小批量抽取 (Small Batch Fetch)
+
+**专属环境命名空间 (Dedicated Env Namespace)**:
+严格以 `MCP_RDBMS_*` 为唯一合法前缀的环境变量体系，彻底排除 `DATABASE_URL`、`PORT`、`HOST` 等通用无前缀变量以物理级防御跨进程配置污染与意外串库。
+_避免使用_: 通用环境变量 (Generic Env)、兼容别名变量 (Alias Env)
+
+
+
 
 
 

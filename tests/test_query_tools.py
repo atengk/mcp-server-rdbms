@@ -235,3 +235,57 @@ async def test_sql_query_explain_blocks_mutation(query_setup):
     assert "只读" in str(exc_info.value)
 
 
+@pytest.mark.asyncio
+async def test_sql_query_dml_remediation_guidance(query_setup):
+    """测试 sql_query 拦截 DML 语句时输出自愈型指引并推荐 sql_dml."""
+    server, _ = query_setup
+    with pytest.raises(ToolError) as exc_info:
+        await server.call_tool(
+            "sql_query",
+            {"sql": "UPDATE users SET username = 'hacked' WHERE id = 1"},
+        )
+    err_msg = str(exc_info.value)
+    assert "自愈指引" in err_msg
+    assert "sql_dml" in err_msg
+    assert "--allow-dml" in err_msg
+
+
+@pytest.mark.asyncio
+async def test_sql_query_ddl_remediation_guidance(query_setup):
+    """测试 sql_query 拦截 DDL 语句时输出自愈型指引并推荐 sql_ddl."""
+    server, _ = query_setup
+    with pytest.raises(ToolError) as exc_info:
+        await server.call_tool(
+            "sql_query",
+            {"sql": "ALTER TABLE users ADD COLUMN phone VARCHAR(20)"},
+        )
+    err_msg = str(exc_info.value)
+    assert "自愈指引" in err_msg
+    assert "sql_ddl" in err_msg
+    assert "--allow-ddl" in err_msg
+
+
+@pytest.mark.asyncio
+async def test_sql_query_truncated_flag(query_setup):
+    """测试 sql_query 正确返回 truncated 状态标识."""
+    server, _ = query_setup
+    # users 表中有 2 条数据，若设置 limit=1 则触发截断
+    res_truncated = await server.call_tool(
+        "sql_query",
+        {"sql": "SELECT * FROM users", "limit": 1},
+    )
+    data_t = res_truncated.structured_content
+    assert data_t["row_count"] == 1
+    assert data_t["truncated"] is True
+
+    # 若设置 limit=10，全量返回未截断
+    res_not_truncated = await server.call_tool(
+        "sql_query",
+        {"sql": "SELECT * FROM users", "limit": 10},
+    )
+    data_nt = res_not_truncated.structured_content
+    assert data_nt["row_count"] == 2
+    assert data_nt["truncated"] is False
+
+
+

@@ -71,7 +71,7 @@ def register_query_tools(server: MCPServer, registry: ConnectionRegistry) -> Non
 
     @server.tool(
         name="sql_query",
-        description="安全执行只读 SQL 查询或获取执行计划。支持 json、markdown 表格与 csv 格式输出，具备 AST 校验、自动 LIMIT 注入及慢查询熔断防护；支持 explain=True 获取执行计划分析慢查询。",
+        description="安全执行只读 SQL 查询或获取执行计划。在初次探索未知业务表时，强烈建议显式指定 limit=3~5 获取结构样本；未显式指定 limit 时系统底层将安全截断至 100 行。支持 json、markdown 表格与 csv 格式输出，具备 AST 校验及慢查询熔断防护；支持 explain=True 获取执行计划分析慢查询。",
     )
     async def sql_query(
         sql: str,
@@ -89,7 +89,7 @@ def register_query_tools(server: MCPServer, registry: ConnectionRegistry) -> Non
         @param limit: 缺省 LIMIT 时的安全截断行数，默认 100（仅在 explain=False 时生效）
         @param timeout: 查询超时阈值（秒），默认 30 秒，最大 120 秒
         @param db: 目标数据库连接别名，缺省时使用默认连接
-        @return: 包含 row_count、format、data、columns 的结果字典
+        @return: 包含 row_count、format、data、columns、truncated 的结果字典
         @throws ToolError: 安全违规、超时熔断或执行异常时抛出
         """
         # 1. 超时时限阈值收敛（1 ~ 120 秒）
@@ -135,12 +135,14 @@ def register_query_tools(server: MCPServer, registry: ConnectionRegistry) -> Non
 
             # 4. 安全类型序列化与目标格式渲染
             formatted_data = SafeSerializer.format_rows(rows, format_type=format)
+            is_truncated = (not explain) and (len(rows) >= limit)
 
             return QueryResult(
                 row_count=len(rows),
                 format=format,
                 data=formatted_data,
                 columns=cols,
+                truncated=is_truncated,
             ).to_dict()
 
         except (SecurityViolationError, DriverMissingError, ConnectionNotFoundError) as exc:

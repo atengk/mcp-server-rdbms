@@ -214,13 +214,35 @@ class ASTGuard:
 
             # 3. 深度检测禁止的写入与 DDL 节点
             if isinstance(node, cls._FORBIDDEN_MUTATION_NODES):
+                node_name = type(node).__name__
+                if isinstance(node, (exp.Insert, exp.Update, exp.Delete, exp.Merge)):
+                    raise SecurityViolationError(
+                        f"只读查询中禁止包含修改操作（检测到非法节点: {node_name}）。"
+                        "💡 自愈指引：sql_query 仅支持安全只读查询；若需执行数据变更，请在开启 --allow-dml 权限后改用 sql_dml 工具下发变更。"
+                    )
+                if isinstance(node, (exp.Create, exp.Alter, exp.Drop, exp.TruncateTable)):
+                    raise SecurityViolationError(
+                        f"只读查询中禁止包含结构定义操作（检测到非法节点: {node_name}）。"
+                        "💡 自愈指引：若需变更数据表结构，请在开启 --allow-ddl 权限后改用 sql_ddl 工具执行（需开启 --allow-ddl 权限且传入 confirm=True）。"
+                    )
                 raise SecurityViolationError(
-                    f"只读查询中禁止包含修改或结构定义操作（检测到非法节点: {type(node).__name__}）。"
+                    f"只读查询中禁止包含修改或结构定义操作（检测到非法节点: {node_name}）。"
                 )
 
         if not isinstance(expr, cls._ALLOWED_QUERY_ROOTS):
+            root_name = type(expr).__name__
+            if isinstance(expr, (exp.Insert, exp.Update, exp.Delete, exp.Merge)):
+                raise SecurityViolationError(
+                    f"只读查询中禁止包含修改操作（检测到语句类型: {root_name}）。"
+                    "💡 自愈指引：sql_query 仅支持安全只读查询；若需执行数据变更，请在开启 --allow-dml 权限后改用 sql_dml 工具下发变更。"
+                )
+            if isinstance(expr, (exp.Create, exp.Alter, exp.Drop, exp.TruncateTable)):
+                raise SecurityViolationError(
+                    f"只读查询中禁止包含结构定义操作（检测到语句类型: {root_name}）。"
+                    "💡 自愈指引：若需变更数据表结构，请在开启 --allow-ddl 权限后改用 sql_ddl 工具执行（需开启 --allow-ddl 权限且传入 confirm=True）。"
+                )
             raise SecurityViolationError(
-                f"当前操作不是支持的只读查询语句（检测到语句类型: {type(expr).__name__}）。"
+                f"当前操作不是支持的只读查询语句（检测到语句类型: {root_name}）。"
             )
 
         return expr

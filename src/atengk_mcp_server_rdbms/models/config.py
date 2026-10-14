@@ -22,3 +22,5 @@ class ServerRuntimeConfig(NamedTuple):
     transport: str
     host: str
     port: int
+    multi_db_urls: dict[str, str] | None = None
+    default_db: str | None = None

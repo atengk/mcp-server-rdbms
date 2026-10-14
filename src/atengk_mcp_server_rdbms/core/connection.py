@@ -149,7 +149,10 @@ class ConnectionRegistry:
         """
         target_name = self._resolve_name(name)
         if target_name not in self._profiles:
-            raise ConnectionNotFoundError(target_name)
+            raise ConnectionNotFoundError(
+                target_name,
+                available_profiles=list(self._profiles.keys()),
+            )
         return self._profiles[target_name]
 
     def is_read_only(self, name: str | None = None) -> bool:
