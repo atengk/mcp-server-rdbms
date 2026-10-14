@@ -326,6 +326,20 @@ def resolve_runtime_config(
     else:
         audit_backup_count = 5
 
+    arg_server_name = getattr(args, "server_name", None) if args else None
+    arg_server_instructions = getattr(args, "server_instructions", None) if args else None
+
+    server_name = (
+        arg_server_name
+        or get_env("MCP_RDBMS_SERVER_NAME", env=source)
+        or "mcp-server-rdbms"
+    )
+
+    server_instructions = (
+        arg_server_instructions
+        or get_env("MCP_RDBMS_SERVER_INSTRUCTIONS", env=source)
+    )
+
     return ServerRuntimeConfig(
         config_file=config_file,
         db_url=db_url,
@@ -340,4 +354,6 @@ def resolve_runtime_config(
         audit_mode=audit_mode,
         audit_max_bytes=audit_max_bytes,
         audit_backup_count=audit_backup_count,
+        server_name=server_name,
+        server_instructions=server_instructions,
     )

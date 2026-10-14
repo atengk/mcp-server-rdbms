@@ -59,7 +59,7 @@ def register_dml_tools(
 
     @server.tool(
         name="sql_dml",
-        description="在单一数据库原子事务中执行单条或批量数据增删改 (DML) 操作。受 --allow-dml 权限门禁保护，任何单步失败全量自动回滚，并在 AST 语法树层强制拦截无 WHERE 条件的 UPDATE 与 DELETE。",
+        description="在单一数据库原子事务中执行单条或批量数据增删改 (DML) 操作。支持多数据库路由（通过 db 参数指定目标数据库连接别名，缺省时路由至默认库）。受 --allow-dml 权限门禁保护，任何单步失败全量自动回滚，并在 AST 语法树层强制拦截无 WHERE 条件的 UPDATE 与 DELETE。",
     )
     async def sql_dml(
         sql: str | list[str],

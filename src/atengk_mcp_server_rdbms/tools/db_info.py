@@ -125,7 +125,7 @@ def register_db_info_tool(server: MCPServer, registry: ConnectionRegistry) -> No
 
     @server.tool(
         name="db_info",
-        description="获取数据库环境元数据与连接清单。缺省调用时返回包含全量脱敏连接清单与当前连接状态，发生连接异常时优雅降级；传入 db 参数时精准探查指定连接详情。",
+        description="获取数据库基础环境元数据与连接清单。支持多数据库环境：缺省调用时返回包含全量脱敏连接清单（connections）与默认连接状态；传入 db='<alias>' 参数时精准探查指定连接详情。在操作多数据库时，可先调用此工具获取可用连接别名列表。",
     )
     async def db_info(db: str | None = None) -> dict[str, Any]:
         """获取目标数据库基础环境元数据或连接清单.

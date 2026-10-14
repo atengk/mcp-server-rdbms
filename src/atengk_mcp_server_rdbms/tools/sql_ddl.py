@@ -54,7 +54,7 @@ def register_ddl_tools(
 
     @server.tool(
         name="sql_ddl",
-        description="执行表结构定义变更 (DDL)，包含建表、改表、删表与表截断。受 --allow-ddl 权限门禁与 confirm=True 显式确认双重保护，并全量落盘独立审计流水。",
+        description="执行表结构定义变更 (DDL)，包含建表、改表、删表与表截断。支持多数据库路由（通过 db 参数指定目标数据库连接别名，缺省时路由至默认库）。受 --allow-ddl 权限门禁与 confirm=True 显式确认双重保护，并全量落盘独立审计流水。",
     )
     async def sql_ddl(
         sql: str,

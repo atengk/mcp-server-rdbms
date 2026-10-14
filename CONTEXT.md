@@ -211,3 +211,11 @@ _避免使用_: 驱动检查器 (Driver Checker)、依赖嗅探器 (Dependency S
 **无串库环境审计 (Namespace Hygiene Audit)**:
 在自检中扫描宿主环境，主动发现被废弃或易混淆的通用无前缀变量（如 DATABASE_URL）并告警其已被安全忽略，同时校验专属命名空间合法性的防护审计机制。
 _避免使用_: 变量审计 (Var Audit)、环境清洗 (Env Sanitizer)
+
+**服务元数据自解释 (Server Metadata Self-Explanation)**:
+允许通过 CLI 参数与专属环境变量自定义 MCP 服务实例显示名称与面向大模型的业务指令说明，使智能体在多服务并发挂载时能够秒级辨识不同实例业务定位的元数据注入机制。
+_避免使用_: 服务别名 (Server Alias)、自定义描述 (Custom Description)
+
+**多库路由提示词引导 (Multi-DB Routing Guidance)**:
+在全部核心数据操作工具的契约描述中显式注入多数据库识别、可用连接查询与跨库定向路由说明，消除大模型跨库执行幻觉并强化精准参数调度的提示词工程机制。
+_避免使用_: 多库提示 (Multi-db Hint)、参数提示词 (Param Prompt)

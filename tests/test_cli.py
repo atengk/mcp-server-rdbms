@@ -230,3 +230,41 @@ def test_cli_subprocess_doctor_text_with_db():
     assert "MCP Server RDBMS 运行环境与健康体检探针" in proc.stdout
     assert "关系型数据库驱动就绪矩阵" in proc.stdout
     assert "sqlite" in proc.stdout
+
+
+def test_parse_args_server_metadata():
+    """验证 --server-name 与 --server-instructions 参数解析正确性."""
+    args = parse_args([
+        "--server-name", "crm-db-service",
+        "--server-instructions", "负责处理 CRM 数据库全量查询与管理操作",
+    ])
+    assert args.server_name == "crm-db-service"
+    assert args.server_instructions == "负责处理 CRM 数据库全量查询与管理操作"
+
+
+def test_build_server_with_custom_metadata():
+    """验证 create_server 成功注入自定义名称与系统提示指令."""
+    registry = ConnectionRegistry()
+    server = create_server(
+        registry,
+        name="custom-db-server",
+        instructions="专属业务指令说明",
+    )
+    assert server.name == "custom-db-server"
+    assert server.instructions == "专属业务指令说明"
+
+
+@pytest.mark.asyncio
+async def test_tools_contain_multi_db_guidance():
+    """验证 6 核心工具 description 均包含多库路由引导说明."""
+    registry = ConnectionRegistry()
+    server = create_server(registry)
+    tools = await server.list_tools()
+    tool_map = {t.name: t for t in tools}
+
+    assert "多数据库" in tool_map["db_info"].description
+    assert "多数据库路由" in tool_map["schema_list_tables"].description
+    assert "多数据库路由" in tool_map["schema_describe_table"].description
+    assert "多数据库路由" in tool_map["sql_query"].description
+    assert "多数据库路由" in tool_map["sql_dml"].description
+    assert "多数据库路由" in tool_map["sql_ddl"].description

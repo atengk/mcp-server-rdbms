@@ -63,7 +63,8 @@
 10. **专属环境命名空间 (Dedicated Namespace Rule)**：
    - 配置解析层严格只识别以 `MCP_RDBMS_*` 为唯一规范前缀的全大写环境变量；
    - 严禁读取宿主系统的通用无前缀别名（如 `DATABASE_URL`、`HOST`、`PORT`、`DB_*`、`CONFIG_FILE` 等），物理级防御跨进程环境污染与意外串库；
-   - 动态多库通过 `MCP_RDBMS_DB_<ALIAS>` 注入，默认库由 `MCP_RDBMS_DEFAULT_DB` 显式声明。
+   - 动态多库通过 `MCP_RDBMS_DB_<ALIAS>` 注入，默认库由 `MCP_RDBMS_DEFAULT_DB` 显式声明；
+   - 多服务独立挂载时的服务元数据通过 `MCP_RDBMS_SERVER_NAME` 与 `MCP_RDBMS_SERVER_INSTRUCTIONS`（或对应 CLI 参数）注入，赋能大模型精准识别业务定位。
 
 ---
 

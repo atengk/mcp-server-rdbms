@@ -5,7 +5,7 @@
   <a href="https://github.com/atengk/mcp-server-rdbms/releases"><img src="https://img.shields.io/github/v/release/atengk/mcp-server-rdbms?style=flat-square&color=blue&label=Release" alt="GitHub Release"></a>
   <a href="https://github.com/atengk/mcp-server-rdbms/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/atengk/mcp-server-rdbms/ci.yml?branch=main&label=CI&style=flat-square" alt="CI Status"></a>
   <a href="https://github.com/atengk/mcp-server-rdbms/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg?style=flat-square" alt="License"></a>
-  <a href="https://github.com/atengk/mcp-server-rdbms/actions"><img src="https://img.shields.io/badge/tests-187%20passed-brightgreen.svg?style=flat-square" alt="Tests"></a>
+  <a href="https://github.com/atengk/mcp-server-rdbms/actions"><img src="https://img.shields.io/badge/tests-217%20passed-brightgreen.svg?style=flat-square" alt="Tests"></a>
   <a href="https://modelcontextprotocol.io/"><img src="https://img.shields.io/badge/MCP-1.1.0-purple.svg?style=flat-square" alt="MCP Protocol"></a>
   <a href="./CONTRIBUTING.md"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square" alt="PRs Welcome"></a>
   <a href="./CODE_OF_CONDUCT.md"><img src="https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg?style=flat-square" alt="Contributor Covenant"></a>
@@ -26,8 +26,10 @@ flowchart TD
         Client["Claude Desktop / Cursor / VS Code / Dify / Windsurf"]
     end
 
-    subgraph ProtocolLayer ["通信传输与分层环境层"]
-        FastMCP["FastMCP 协议服务器 (stdio / sse)"]
+    subgraph ProtocolLayer ["通信传输、自解释元数据与环境层"]
+        FastMCP["FastMCP 协议服务器 (stdio / sse / streamable-http)"]
+        Meta["服务元数据自解释 (--server-name / --server-instructions)"]
+        Doctor["健康体检探针与版本反射 (--doctor / --version)"]
         Env["分层环境解析器 (core/env.py)"]
         Dotenv[".env 自动探测与 RFC 1738 密码免转义拼装"]
     end
@@ -36,14 +38,15 @@ flowchart TD
         ASTParse["sqlglot AST 语法树解析与分析"]
         ReadOnly["只读语义校验 (Select / CTE With)"]
         LimitInject["自动注入安全 LIMIT 截断 (默认 100 行)"]
-        WhereGuard["DML 强制阻断无 WHERE 条件的 UPDATE/DELETE"]
+        WhereGuard["DML 强制阻断无 WHERE 条件与恒真伪条件"]
         ExplainGuard["sql_query explain 危险修饰符 (ANALYZE) 拦截与剥离"]
     end
 
-    subgraph EngineLayer ["连接池与多库路由中枢 (core/connection.py)"]
+    subgraph EngineLayer ["连接池、分级审计与多库路由中枢 (core/)"]
         Registry["ConnectionRegistry (多库配置中心)"]
         Pool["连接池健康预检与自愈 (pool_pre_ping)"]
-        Audit["独立审计流水日志 (rdbms_mcp_audit.log)"]
+        Audit["分级审计与防爆截断器 (mutation/all/off, 4096 字符截断)"]
+        Resources["MCP 只读资源暴露器 (rdbms://connections, schema, audit)"]
     end
 
     subgraph DatabaseLayer ["多元关系型数据库集群 (SQLAlchemy 2.0)"]
@@ -54,56 +57,64 @@ flowchart TD
         MSSQL[("SQL Server / ClickHouse / 国产库")]
     end
 
-    Client -->|"JSON-RPC (stdio / sse)"| FastMCP
+    Client -->|"JSON-RPC / SSE"| FastMCP
+    FastMCP --> Meta
+    Doctor -.-> Registry
     Dotenv --> Env --> Registry
-    FastMCP -->|"6 核心工具调用"| GuardLayer
+    FastMCP -->|"6 核心工具调用 (带多库路由引导)"| GuardLayer
+    FastMCP -->|"3 大 MCP 只读资源"| Resources
     GuardLayer -->|"AST 验证通过"| Registry
     Registry --> Pool
     Pool -->|"工作线程池异步卸载 (anyio)"| DatabaseLayer
-    Registry -.->|"写操作流水异步落盘"| Audit
+    Registry -.->|"审计流水异步落盘"| Audit
 ```
 
 - 🚀 **通用多数据库抽象底座**：
   - 基于 SQLAlchemy 2.0 驱动引擎，默认内置 **SQLite**、**PostgreSQL** (`psycopg3`)、**MySQL** (`pymysql`)；
   - 插件化扩展无缝支持 **Oracle**、**SQL Server**、**ClickHouse** 及各类符合标准方言的国产数据库（达梦、人大金仓等）。
+- 🩺 **开箱即用健康体检与自检探针 (`--doctor` / `--version`)**：
+  - 集成全方位体检探针，秒级扫描 9 大驱动就绪矩阵、检测被废弃通用变量以防意外串库、并对数据库进行 Ping 握手探活；
+  - 默认以 Rich 彩色终端卡片呈现，支持 `--format json` 便于自动化 CI/CD 巡检集成。
 - 🛡️ **AST 语法树级深度安全守卫 (Guardrail)**：
   - 基于 `sqlglot` 语法树静态分析，只读模式下物理拦截任何多语句拼接（SQL 注入防御）以及非 SELECT/WITH 写入操作；
   - **自动 LIMIT 注入**：为未指定行数的大模型查询强制追加安全截断（默认 100 行），彻底杜绝全表拉取导致 OOM 或上下文爆炸；
-  - **灾难性误改误删阻断**：静态分析强制拦截缺少 `WHERE` 条件的 `UPDATE` 与 `DELETE` 语句，直接驳回。
+  - **灾难性误改误删阻断**：静态分析强制拦截缺少 `WHERE` 条件或退化为恒真条件（如 `1=1`、`true`）的 `UPDATE` 与 `DELETE` 语句，直接驳回。
 - ⚡ **原子事务与权限双重门禁**：
   - `sql_dml` 接受单条或批量 SQL，底层在**单一原子事务块**中执行，任何单步失败全量自动 `ROLLBACK`，绝不留脏数据；
   - 默认强只读保护，写权限必须通过 `--allow-dml` 与 `--allow-ddl` 显式授权，且 DDL 建表/删表要求 `confirm=True` 二次确认。
-- 🌐 **多数据库配置中心与连接池自愈**：
-  - 支持单库环境变量/CLI 直连，亦支持通过 YAML/JSON 配置文件声明多库路由；
-  - 连接池集成 `pool_pre_ping=True` 探针预检与周期回收，毫秒级自愈因外部超时、防火墙丢包或数据库重启导致的死连接。
-- 🔍 **精炼 6 核心工具矩阵**：无二义性、零冗余设计，工具严格按领域命名空间规范组织，模型理解与调用准确率极高。
-- 📝 **变更操作独立审计流水**：所有 DDL 与 DML 操作均异步落盘记录至本地 `rdbms_mcp_audit.log`，包含时间戳、执行 SQL、影响行数与耗时。
+- 🌐 **多数据库双模解耦与路由引导**：
+  - **单实例多库**：全部工具描述注入强引导提示词，大模型可结合 `rdbms://connections` 资源通过 `db` 参数精准调度；
+  - **多实例挂载**：支持通过 `--server-name` 与 `--server-instructions` 注入业务元数据，彻底消灭大模型在多服务实例下的理解歧义。
+- 📝 **分级审计流水与防爆截断保护**：
+  - 支持 `mutation`（仅写操作）、`all`（全量含只读分析）与 `off`（关闭）三档分级模式；
+  - 具备 4096 字符长语句折叠与批量 100 条智能截断，物理级防御大文本打爆磁盘；通过 `rdbms://audit/recent` 供模型自主追溯。
 
 ---
 
 ## 🛠️ 6 核心工具矩阵全景契约
 
-所有工具均支持可选的 `db` 参数。不传时自动路由到默认连接；传入时精确定位目标多库别名：
+服务严格恪守“精炼 6 核心工具契约”，杜绝工具蔓延。所有工具均在描述中内置多库路由引导，支持可选的 `db` 参数（不传自动路由到默认连接；传入时精准定位目标库）：
 
 | 领域前缀 | 工具名称 | 参数契约 | 功能描述与安全约束 |
 | :--- | :--- | :--- | :--- |
-| **`db_`** | `db_info` | `(db: str = None)` | 一站式探查数据库内核版本、当前 Schema/用户、只读保护及全部已配置连接别名列表（密码强制 `***` 掩码脱敏） |
-| **`schema_`** | `schema_list_tables` | `(schema=None, pattern=None, include_views=False, include_foreign_keys=False, db=None)` | 获取业务数据表与视图清单、表注释并支持模式过滤与可选外键依赖拓扑分析。自动过滤数据库系统保留模式 |
-| | `schema_describe_table` | `(table_name: str, schema=None, db=None)` | 一站式全息探查数据表列明细（类型、可空性、默认值）、主键约束、外键关联与全部索引明细 |
-| **`sql_`** | `sql_query` | `(sql: str, limit: int = 100, format="json", explain: bool = False, db=None)` | 安全只读数据采样与业务分析，支持复杂 CTE `WITH` 语法。支持 `json` / `markdown` / `csv` 格式、长文本自动截断、`truncated` 截断状态标注与自愈型重定向指引；`explain=True` 时内生获取执行计划 |
-| | `sql_dml` | `(sql: str \| list[str], db=None)` | 原子事务数据增删改（支持单条或批量）。**单步失败全量自动回滚**，受 `--allow-dml` 门禁管控，**强制拦截无 WHERE 条件操作** |
-| | `sql_ddl` | `(sql: str, confirm: bool = False, db=None)` | 结构定义变更（建表、删表、改表）。受 `--allow-ddl` 权限管控并要求 `confirm=True` 二次确认 |
+| **`db_`** | `db_info` | `(db: str = None)` | 一站式探查数据库内核版本、当前 Schema/用户、只读保护及全部已配置连接别名列表（密码强制 `***` 掩码脱敏）。多库环境下可供大模型快速发现可用数据库 |
+| **`schema_`** | `schema_list_tables` | `(schema=None, pattern=None, include_views=False, include_foreign_keys=False, db=None)` | 获取业务数据表与视图清单、表注释并支持模式过滤与可选外键依赖拓扑分析。支持多数据库路由，自动过滤底层系统保留模式 |
+| | `schema_describe_table` | `(table_name: str, schema=None, db=None)` | 一站式全息探查数据表列明细（类型、可空性、默认值）、主键约束、外键关联与全部索引明细。支持多数据库路由 |
+| **`sql_`** | `sql_query` | `(sql: str, limit: int = 100, format="json", explain: bool = False, db=None)` | 安全只读数据采样与业务分析，支持复杂 CTE `WITH` 语法与多库路由。支持 `json` / `markdown` / `csv` 格式、长文本自动截断与自愈型重定向指引；`explain=True` 时内生获取执行计划 |
+| | `sql_dml` | `(sql: str \| list[str], db=None)` | 原子事务数据增删改（支持单条、批量与 MERGE，支持多库路由）。**单步失败全量自动回滚**，受 `--allow-dml` 门禁管控，**强制拦截无 WHERE 条件与恒真操作** |
+| | `sql_ddl` | `(sql: str, confirm: bool = False, db=None)` | 结构定义变更（建表、删表、改表，支持多库路由）。受 `--allow-ddl` 权限管控并要求 `confirm=True` 二次确认 |
 
 ---
 
 ## 📚 MCP 只读资源 (Resources) 契约
 
-服务全面接入标准 MCP Resources 协议，为支持资源挂载的 AI 客户端（如 Claude Desktop、Cursor 等）提供零 Tool Call 秒级注入数据库上下文能力：
+服务全面接入标准 MCP Resources 协议，为支持资源挂载的 AI 客户端（如 Claude Desktop、Cursor 等）提供零 Tool Call 秒级注入数据库上下文与自省能力：
 
 | 资源 URI / 模板 | 类型 | 传输格式 | 功能说明与容灾表现 |
 | :--- | :--- | :--- | :--- |
-| `rdbms://connections` | 静态资源 | `application/json` | 输出当前所有已配置数据库连接别名、方言内核、默认库标记与只读状态（密码强制 `***` 掩码脱敏） |
-| `rdbms://{db}/schema` | 动态模板 | `application/json` | 按需获取指定连接的数据库模式名、业务表与视图清单概要及注释。当目标连接不可达或配置不存在时优雅降级返回 `status: "error"` 与错误原因，不导致协议崩溃 |
+| `rdbms://connections` | 静态资源 | `application/json` | 输出当前所有已配置数据库连接别名、方言内核、默认库标记与只读状态（密码强制 `***` 掩码脱敏），供大模型预装载全局连接认知 |
+| `rdbms://{db}/schema` | 动态模板 | `application/json` | 按需获取指定连接的数据库模式名、业务表与视图清单概要及注释。当目标连接不可达时优雅降级返回 `status: "error"` 与错误原因，不导致协议崩溃 |
+| `rdbms://audit/recent` | 静态资源 | `application/json` | 查看服务近期执行的 SQL 操作与审计流水（默认返回最近 50 条），支持防爆截断与优雅容灾降级返回空数组 |
 
 ---
 
@@ -132,13 +143,81 @@ uv run atengk-mcp-server-rdbms --db-url "sqlite:///./demo.db"
 
 ---
 
+## 🩺 命令行自检与运维诊断 (--doctor / --version)
+
+服务内置全方位健康体检探针，帮助开发者在接入 Claude Desktop、Cursor 或云端容器前秒级排查驱动缺失、环境变量语法错误与网络连通性阻断：
+
+```bash
+# 1. 执行全方位自检探针 (诊断本地驱动就绪矩阵、命名空间合规性与连通性)
+uvx atengk-mcp-server-rdbms --doctor
+
+# 2. 携带目标数据库连接执行真实握手探活 (测试网络通畅度与账号权限)
+uvx atengk-mcp-server-rdbms --db-url "postgresql+psycopg://user:password@localhost:5432/mydb" --doctor
+
+# 3. 机器可读模式 (输出 JSON，便于 CI/CD 自动化流水线集成)
+uvx atengk-mcp-server-rdbms --doctor --format json
+
+# 4. 显示服务版本、Python 运行时、SQLAlchemy 版本与操作系统基线
+uvx atengk-mcp-server-rdbms --version
+```
+
+### 终端高保真体检输出预览 (Terminal Card Preview)
+
+```text
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ MCP Server RDBMS 运行环境与健康体检探针 (Doctor Diagnostics)                │
+│ 服务版本: 1.2.2 | Python: 3.12.14 (CPython) | SQLAlchemy: 2.1.3 | SQLGlot:  │
+│ 30.21.0                                                                     │
+└─────────────────────────────────────────────────────────────────────────────┘
+                          1. 关系型数据库驱动就绪矩阵                          
+┌─────────────────────┬────────────────────┬────────────┬─────────────────────┐
+│ 目标方言            │ 对应驱动包         │  就绪状态  │ 驱动版本 / 安装指引 │
+├─────────────────────┼────────────────────┼────────────┼─────────────────────┤
+│ sqlite              │ sqlite3            │  [✓] 就绪  │ 3.12.14             │
+│ mysql / mariadb     │ pymysql            │  [✓] 就绪  │ 1.2.3               │
+│ postgresql          │ psycopg            │  [✓] 就绪  │ 3.3.6               │
+│ oracle              │ oracledb           │ [!] 未安装 │ 可选驱动未安装。如… │
+│ mssql (SQL Server)  │ pyodbc             │ [!] 未安装 │ 可选驱动未安装。如… │
+│ clickhouse          │ clickhouse-connect │ [!] 未安装 │ 可选驱动未安装。如… │
+│ dm (达梦)           │ dmPython           │ [!] 未安装 │ 可选驱动未安装。如… │
+│ kingbase (人大金仓) │ ksycopg2           │ [!] 未安装 │ 可选驱动未安装。如… │
+└─────────────────────┴────────────────────┴────────────┴─────────────────────┘
+
+                       2. 环境变量命名空间与配置合规审计                       
+┌──────────────────────────┬──────────┬───────────────────┬───────────────────┐
+│ 审计检测项               │   状态   │ 取值 / 命中       │ 合规诊断明细与建议│
+├──────────────────────────┼──────────┼───────────────────┼───────────────────┤
+│ 通用无前缀环境变量扫描   │ [✓] 合规 │ 合规              │ 未发现导致意外串库│
+│ MCP_RDBMS_* 专属变量纳管 │ [✓] 合规 │ 2 项生效          │ 当前环境生效 2 项 │
+│ 单库连接串语法合法性     │ [✓] 合规 │ postgresql+psy... │ URL 语法校验通过  │
+└──────────────────────────┴──────────┴───────────────────┴───────────────────┘
+
+                          3. 数据库连接握手与探活探针                          
+┌──────────┬────────────┬───────────────────────┬──────────┬──────────────────┐
+│ 连接别名 │ 方言       │ 连接串 (脱敏)         │  连通性  │ 延迟 / 错误原因  │
+├──────────┼────────────┼───────────────────────┼──────────┼──────────────────┤
+│ default  │ postgresql │ postgresql+psycopg... │ [✓] 通畅 │ 14.25 ms (Ping)  │
+└──────────┴────────────┴───────────────────────┴──────────┴──────────────────┘
+
+┌────────────────────── ✓ 诊断通过：环境与服务状态健康 ───────────────────────┐
+│ 全部核心诊断项通过，运行环境与数据库连接通畅。                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### 探针覆盖的三大核心维度：
+1. **驱动支持矩阵 (Driver Matrix)**：静态安全嗅探 9 大关系型数据库方言驱动支持度，精准输出一键安装命令；
+2. **专属命名空间审计 (Namespace Hygiene)**：排查宿主环境是否存在被废弃或易混淆的通用无前缀变量（如 `DATABASE_URL`），主动告警其已被安全忽略，物理防御跨进程串库；
+3. **连接握手探活探针 (Connection Probe)**：对配置的连接建立真实短连接并执行 `SELECT 1`，输出毫秒级响应延迟与错误根因（凭据密码自动 `***` 脱敏）。
+
+---
+
 ## 🔌 MCP 客户端通用标准配置
 
 > 💡 **提示**：以下配置完全遵循 Model Context Protocol (MCP) 官方开放规范，适用于 **Claude Desktop**、**Cursor**、**Windsurf**、**VS Code** 以及任何兼容 MCP 协议的 AI 客户端。
 
-### 场景 1：标准本地调用 (stdio 协议，推荐)
+### 场景 1：单数据库标准本地调用 (stdio 协议，推荐)
 
-在您所使用客户端的 MCP 配置文件（如 `mcp.json` 或 `claude_desktop_config.json`）的 `"mcpServers"` 块中添加。支持**环境变量注入**与**命令行参数**两种等价范式：
+在客户端 MCP 配置文件（如 `mcp.json` 或 `claude_desktop_config.json`）的 `"mcpServers"` 块中添加：
 
 #### 模式 A-1：原子字段模式（🔥 强烈推荐 ⭐⭐⭐⭐⭐，密码特殊字符免手动转义！）
 > 针对密码包含 `@`、`#`、`:` 等特殊字符的情况，**直接填写明文密码即可**！服务内置环境自动拼装器会自动进行 RFC 1738 安全转义，再也无需手工查表编码！
@@ -193,18 +272,73 @@ uv run atengk-mcp-server-rdbms --db-url "sqlite:///./demo.db"
 }
 ```
 
-#### 模式 C：多数据库配置中心模式
+---
+
+### 场景 2：单服务实例多数据库管理 (Single-Server Multi-DB)
+
+适合希望由单个常驻服务统一管理多套业务数据库的场景。支持零物理配置文件的环境变量多库注入：
+
 ```json
 {
   "mcpServers": {
-    "rdbms": {
+    "rdbms_cluster": {
       "command": "uvx",
       "args": ["atengk-mcp-server-rdbms"],
       "env": {
-        "MCP_RDBMS_CONFIG": "/path/to/connections.yaml",
-        "MCP_RDBMS_ALLOW_DML": "true",
-        "MCP_RDBMS_ALLOW_DDL": "true"
+        "MCP_RDBMS_DB_CRM": "postgresql+psycopg://user:pass@10.0.0.1:5432/crm_db",
+        "MCP_RDBMS_DB_ERP": "mysql+pymysql://root:pass@10.0.0.2:3306/erp_db",
+        "MCP_RDBMS_DEFAULT_DB": "crm",
+        "MCP_RDBMS_ALLOW_DML": "true"
       }
+    }
+  }
+}
+```
+* **大模型工作流**：客户端启动时读取 `rdbms://connections` 资源秒级获取连接列表；大模型调用工具时传入 `db="erp"` 即可精准跨库路由，缺省时自动路由到 `crm` 默认库。
+
+---
+
+### 场景 3：多服务实例独立挂载与自解释 (Multi-Server Instances)
+
+适合在客户端配置中为不同业务系统分别挂载独立的 MCP 服务的场景。通过 `--server-name` 与 `--server-instructions` 为大模型注入业务身份：
+
+```json
+{
+  "mcpServers": {
+    "crm_database": {
+      "command": "uvx",
+      "args": [
+        "atengk-mcp-server-rdbms",
+        "--db-url", "postgresql+psycopg://user:pass@10.0.0.1:5432/crm",
+        "--server-name", "crm-database-service",
+        "--server-instructions", "企业 CRM 客户库专用通道。负责客户档案、跟进线索与商机表查询。"
+      ]
+    },
+    "erp_database": {
+      "command": "uvx",
+      "args": [
+        "atengk-mcp-server-rdbms",
+        "--db-url", "mysql+pymysql://root:pass@10.0.0.2:3306/erp",
+        "--server-name", "erp-database-service",
+        "--server-instructions", "企业 ERP 进销存专用通道。负责采购入库、库存盘点与财务凭证表查询。"
+      ]
+    }
+  }
+}
+```
+* **大模型工作流**：在建联握手阶段，大模型通过专属名称与业务提示词直接分辨不同服务的定位，即使工具同名也能精准调度。
+
+---
+
+### 场景 4：远程服务调用 (HTTP/SSE 协议接入)
+
+若服务已部署在局域网、云服务器或容器中，客户端可直接通过标准 HTTP SSE 端点接入：
+
+```json
+{
+  "mcpServers": {
+    "rdbms-remote": {
+      "url": "http://<服务器IP>:8000/sse"
     }
   }
 }
@@ -234,70 +368,110 @@ uv run atengk-mcp-server-rdbms --db-url "sqlite:///./demo.db"
 | **通信传输协议** | `MCP_RDBMS_TRANSPORT` | `stdio`（默认）、`sse`、`streamable-http` |
 | **服务监听地址** | `MCP_RDBMS_SERVER_HOST` | SSE/HTTP 监听地址（默认: `127.0.0.1`） |
 | **服务监听端口** | `MCP_RDBMS_SERVER_PORT` | SSE/HTTP 监听端口（默认: `8000`） |
+| **服务实例名称** | `MCP_RDBMS_SERVER_NAME` | 自定义服务实例名称（多实例挂载时区分业务，默认 `mcp-server-rdbms`） |
+| **服务业务指令** | `MCP_RDBMS_SERVER_INSTRUCTIONS` | 面向大模型注入的专属业务提示词指令 |
+| **审计日志路径** | `MCP_RDBMS_AUDIT_LOG_FILE` | 审计日志落盘路径（默认: `rdbms_mcp_audit.log`） |
+| **审计记录范围** | `MCP_RDBMS_AUDIT_MODE` | 审计模式：`mutation`（仅变更, 默认）、`all`（含只读查询）、`off`（关闭） |
+| **审计单片大小** | `MCP_RDBMS_AUDIT_MAX_BYTES` | 触发日志切片轮转的最大字节数（默认 10MB: `10485760`） |
+| **审计保留份数** | `MCP_RDBMS_AUDIT_BACKUP_COUNT` | 保留的历史切片副本数（默认 `5`） |
 
 > 📌 **解析优先级规则**：`命令行参数 (最高)` > `全量 URL 环境变量` > `独立字段环境变量拼装` > `标准内置默认值`。本地执行时会自动探测读取同级目录下的 `.env` 文件。
 
 ---
 
-### 场景 2：远程服务调用 (SSE 协议客户端接入)
+## 💡 智能体提示词与日常实战对话指南 (Prompt Recipes & Scenarios)
 
-若服务已部署在局域网、云服务器或容器中，客户端可直接通过标准 HTTP SSE 端点接入：
-
-```json
-{
-  "mcpServers": {
-    "rdbms-remote": {
-      "url": "http://<服务器IP>:8000/sse"
-    }
-  }
-}
-```
+为让大模型在日常对话中更精准、更智能地调度数据库工具，推荐在各类 AI 客户端（**Cursor**、**Claude Desktop**、**Windsurf**、**Dify**）的系统提示词（System Prompt / Rules）中配置下方的**万能通用系统提示词**，并在日常工作中直接参考 **6 大高频实战提问剧场**。
 
 ---
 
-## 💡 智能体提示词模版与实战指南 (Agent Prompt Recipes)
+### 1. 开箱即用万能系统提示词 (Universal System Prompt)
 
-为充分发挥大模型内生 SQL 能力与零 Tool Call 极速交互优势，推荐在各类 AI 客户端（如 **Claude Desktop**、**Cursor**、**Windsurf**、**Dify**）的系统提示词（System Prompt）或项目规则中按需选用以下经过实战检验的高效模版：
-
-### 模版 1：零 Tool Call 预装载全局数据库上下文 (Zero-Tool Context Preloading)
-> **适用场景**：对话启动瞬间即掌握全库连接拓扑与表清单，彻底免去每次提问大模型先调用 `db_info` 或 `schema_list_tables` 查表的往返开销与 Token 浪费。
+> 💡 **使用建议**：将以下内容直接复制到您的 AI 客户端系统提示词（System Prompt）、`.cursorrules` 或全局规则中。无论单库、多库、只读分析还是安全运维，一段提示词全面搞定：
 
 ```markdown
-你是一个精通关系型数据库的专业资深工程师与数据专家。
-当前环境已接入通用数据库 MCP 服务，请遵循以下上下文约束：
-1. 【全局连接认知】：优先通过 MCP 静态资源 `rdbms://connections` 获取当前系统注册的所有可用数据库连接别名、方言内核与默认只读属性；
-2. 【表清单与模式背景】：通过 MCP 动态资源模板 `rdbms://{db}/schema` 直接预置目标数据库的模式名、业务数据表及表注释概要；
-3. 【直达业务查询】：用户提出业务数据分析、采样或统计需求时，请直接基于已知表结构编写精确的只读 SQL 并通过 `sql_query` 执行；除非需要精细到某一列的深度类型与索引分析（调用 `schema_describe_table`），严禁盲目发起全库表清单扫描！
+你是一名精通关系型数据库与 SQL 调优的高级数据专家与研发助理。当前环境已通过通用关系型数据库 MCP 服务接入数据源，请严格遵循以下日常交互准则：
+
+1. 【库表摸底与多库路由】：
+   - 对话初次涉及业务时，可通过只读资源 `rdbms://connections` 或 `db_info` 工具获取所有已配置连接别名与默认库状态；
+   - 系统支持多库路由。若用户提问涉及指定库（如“在 CRM 库查…”），请在调用工具时显式传入 `db="crm"`；缺省时将自动路由至默认数据库。
+2. 【安全只读探索与小样本采样】：
+   - 探查业务宽表或未知数据时，请显式使用 `sql_query(sql=..., limit=3~5)` 进行微采样，确认实际列名与数据形态后再编写复杂统计分析；
+   - 严禁盲目执行全量扫描；未显式指定 limit 时系统底层将安全截断至 100 行。
+3. 【慢查询与执行计划诊断】：
+   - 当用户要求“分析性能/优化慢查询/诊断索引”时，请调用 `sql_query(sql=..., explain=True)`；
+   - 根据返回的执行计划（扫描类型、过滤条件、索引使用）为用户输出通俗、专业的性能诊断与建索引建议。
+4. 【受控变更与破坏防御】：
+   - 数据变更（DML）必须在单一事务中执行：`sql_dml(sql=...)`，单步失败自动全量回滚；系统 AST 会强制拦截无 WHERE 条件或恒真伪条件的误操作；
+   - 结构变更（DDL）必须显式确认：调用 `sql_ddl(sql=..., confirm=True)`，调用前向用户清晰列出变更脚本并提示影响。
 ```
 
 ---
 
-### 模版 2：数据智能分析与慢查询诊断专家 (Data Analyst & Tuning Assistant)
-> **适用场景**：日常业务数据采样、多维统计聚合、报表生成，以及复杂慢查询与索引命中瓶颈排查。
+### 2. 日常高频自然语言实战剧场 (Daily Conversation Scenarios)
 
-```markdown
-你是一名高级数据库性能调优与只读数据分析专家。
-在协助用户进行数据查询与性能诊断时，请严格执行以下规范：
-1. 【只读安全规范】：仅使用 `sql_query` 工具。未指定 LIMIT 的数据采样，系统底层会自动注入安全截断限制（默认 100 行）；
-2. 【大模型内生能力】：需要探查数据库活动进程、长事务会话或原生建表 DDL 时，无需寻找专有工具，请直接根据当前方言自主构造标准只读 SQL（例如 PostgreSQL 查询 `pg_stat_activity`，MySQL 执行 `SHOW PROCESSLIST` 或 `SHOW CREATE TABLE`），借助 `sql_query` 自由探查；
-3. 【执行计划深度诊断】：当用户要求“分析该查询性能/诊断慢查询/排查索引命中”时，请调用 `sql_query(sql=..., explain=True)`。系统会自动剥离 ANALYZE 危险修饰符以守牢安全底线；请结合返回的扫描类型（如 ALL/Index/Seq Scan）、预估行数与索引键，为用户输出通俗易懂的调优诊断报告与索引优化建议。
-```
+在日常使用中，您只需像与资深 DBA 对话一样提出自然语言需求，大模型即可精准触发对应工具：
+
+#### 场景 1：日常摸库与表结构全息探查
+* 👤 **您在聊天框说**：
+  > “帮我看看当前数据库里有哪些和用户、权限相关的表？列出表名和注释，并把用户表的字段结构与索引详细查一下。”
+* 🤖 **大模型背后的工具调用链路**：
+  1. 调用 `schema_list_tables(pattern="*user*", include_views=True)` $\to$ 秒级筛选出 `sys_user`、`sys_user_role` 等业务表与表注释；
+  2. 调用 `schema_describe_table(table_name="sys_user")` $\to$ 获取列类型、可空性、主键、外键与索引清单。
+* 🎯 **大模型呈现给您的回答**：
+  > 整理为清晰的 Markdown 结构表，为您详细解读 `sys_user` 的主键、关键业务列（如 `phone`、`status`）及现有唯一索引。
+
+---
+
+#### 场景 2：日常业务数据采样、统计聚合与分析
+* 👤 **您在聊天框说**：
+  > “统计一下今年第二季度各渠道的新增用户数和充值总额，按充值总额倒序排列，输出 Markdown 表格，并给出简要业务洞察。”
+* 🤖 **大模型背后的工具调用链路**：
+  1. 调用 `sql_query(sql="SELECT * FROM pay_order LIMIT 3")` $\to$ 采样确认订单表时间字段与金额字段类型；
+  2. 调用 `sql_query(sql="SELECT channel, COUNT(DISTINCT user_id) AS new_users, SUM(amount) AS total_pay FROM pay_order WHERE created_at >= '2026-04-01' GROUP BY channel ORDER BY total_pay DESC")` $\to$ 安全聚合计算。
+* 🎯 **大模型呈现给您的回答**：
+  > 呈现整洁的格式化统计表格，并自动计算各渠道人均付费（ARPU）及业务洞察结论。
 
 ---
 
-### 模版 3：生产级安全受控变更工程师 (Safe Migration & Atomic Mutation)
-> **适用场景**：数据修补、结构迁移、批量更正或紧急运维维护，守牢不可逆破坏防御红线。
-
-```markdown
-你是一名严谨的数据库运维变更专家。
-当前会话已开放受控写入权限，但在执行任何数据（DML）或结构（DDL）操作前，必须严格遵循以下铁律：
-1. 【灾难性误改误删物理拦截】：严禁执行任何缺少 WHERE 条件的 UPDATE 或 DELETE；任何诸如 `WHERE 1=1` 的恒真伪条件均会被系统 AST 守卫直接强行驳回！
-2. 【原子性事务保障】：多条关联数据更新请合并为 SQL 列表传入 `sql_dml(sql=[...])`。系统会在单一底层事务中原子执行，任一语句报错将全量自动回滚；
-3. 【结构变更二次确认】：执行表结构定义变更时，必须使用 `sql_ddl(sql=..., confirm=True)`。在正式调用前，向用户完整展示预期执行的 DDL 脚本并说明影响范围；
-4. 【变更自检闭环】：每次数据变更完成后，主动调用 `sql_query` 采样受影响行并向用户核验数据一致性。
-```
+#### 场景 3：多数据库跨库联动查询与调度
+* 👤 **您在聊天框说**：
+  > “先在 CRM 库查出近 30 天消费排名前 5 的 VIP 客户列表，然后再去 ERP 库看看他们当前是否有未发货的订单。”
+* 🤖 **大模型背后的工具调用链路**：
+  1. 调用 `sql_query(db="crm", sql="SELECT customer_id, name, total_spent FROM vip_customer ORDER BY total_spent DESC LIMIT 5")` $\to$ 定向从 CRM 库提取 5 位客户；
+  2. 调用 `sql_query(db="erp", sql="SELECT order_id, customer_id, status FROM erp_order WHERE customer_id IN (...) AND status = 'PENDING'")` $\to$ 定向从 ERP 库拉取未发货订单。
+* 🎯 **大模型呈现给您的回答**：
+  > 综合两套库的数据，为您汇总列出：“客户张总（CRM ID: 108）在 ERP 中有 2 笔待发货单（单号 #9021, #9045），请及时跟进履约。”
 
 ---
+
+#### 场景 4：日常慢查询排查与索引性能调优
+* 👤 **您在聊天框说**：
+  > “这条订单查询语句在生产环境跑了 3 秒多：`SELECT * FROM orders WHERE status = 'PAID' AND user_id = 9527 ORDER BY create_time DESC`，帮我 explain 分析一下原因，看需要建什么索引？”
+* 🤖 **大模型背后的工具调用链路**：
+  - 调用 `sql_query(sql="SELECT * FROM orders WHERE status = 'PAID' AND user_id = 9527 ORDER BY create_time DESC", explain=True)` $\to$ 系统安全拦截并剥离危险修饰符，自动获取执行计划。
+* 🎯 **大模型呈现给您的回答**：
+  > “执行计划显示当前触发了全表扫描（`type: ALL`），预估扫描了 120 万行，且出现了内存排序（`Using filesort`）。**优化建议**：推荐建立联合索引 `CREATE INDEX idx_orders_user_status_time ON orders(user_id, status, create_time DESC);`，可将复杂度降至 `ref` 级别，消除 filesort。”
+
+---
+
+#### 场景 5：生产级受控数据修补与原子事务更新
+* 👤 **您在聊天框说**：
+  > “用户 2001 投诉扣款未到账，排查确认后需要把用户钱包余额增加 100 元，并将补单流水状态更新为已处理，这两步必须一起成功。”
+* 🤖 **大模型背后的工具调用链路**：
+  - 调用 `sql_dml(sql=["UPDATE user_wallet SET balance = balance + 100 WHERE user_id = 2001", "UPDATE pay_reconcile SET status = 'DONE' WHERE user_id = 2001 AND order_no = 'REC8891'"])` $\to$ 单一底层事务原子执行，若钱包更新失败则流水自动回滚，且 AST 强校验 WHERE 条件非空。
+* 🎯 **大模型呈现给您的回答**：
+  > “已成功在原子事务中执行 2 条更新语句，影响行数：2 行。随后已为您采样复核用户 2001 最新余额与流水状态，核验一致。”
+
+---
+
+#### 场景 6：原生方言运维探查与长事务诊断
+* 👤 **您在聊天框说**：
+  > “数据库好像有点卡，帮我看看当前 MySQL 实例有哪些运行时间超过 10 秒的活动连接或锁等待线程？”
+* 🤖 **大模型背后的工具调用链路**：
+  - 调用 `sql_query(sql="SELECT id, user, host, db, command, time, state, info FROM information_schema.processlist WHERE command != 'Sleep' AND time > 10 ORDER BY time DESC")` $\to$ 借助大模型内生方言能力直达运维视图。
+* 🎯 **大模型呈现给您的回答**：
+  > 迅速排查出线程 ID 为 8821 的报表导出慢查询正持有表行锁，并给出杀死阻塞线程的运维指引。
 
 ## 🐳 生产环境容器化常驻部署 (Docker & Docker Compose)
 
@@ -473,30 +647,61 @@ uv pip install "atengk-mcp-server-rdbms[all]"         # 一键安装所有驱动
 ## 💻 完整 CLI 启动参数参考表
 
 ```text
-用法: atengk-mcp-server-rdbms [-h] [--db-url DB_URL] [--config CONFIG] [--allow-dml]
-                              [--allow-ddl] [--transport {stdio,sse,streamable-http}]
+用法: atengk-mcp-server-rdbms [-h] [--version] [--doctor] [--format {text,json}]
+                              [--server-name SERVER_NAME]
+                              [--server-instructions SERVER_INSTRUCTIONS]
+                              [--db-url DB_URL] [--config CONFIG]
+                              [--allow-dml] [--allow-ddl]
+                              [--transport {stdio,sse,streamable-http}]
                               [--host HOST] [--port PORT]
+                              [--audit-log AUDIT_LOG]
+                              [--audit-mode {mutation,all,off}]
+                              [--audit-max-bytes AUDIT_MAX_BYTES]
+                              [--audit-backup-count AUDIT_BACKUP_COUNT]
 ```
 
-| 参数选项 | 类型 | 环境变量等价项 | 默认值 | 功能详细说明 |
+| 参数选项 | 类型 | 专属环境变量等价项 | 默认值 | 功能详细说明 |
 | :--- | :---: | :---: | :---: | :--- |
-| **`--db-url`** | `str` | `DATABASE_URL` | `None` | 单数据库连接串 URL，优先级高于环境变量 |
+| **`--doctor`** | `flag` | - | `False` | 启动运行环境、9 大方言驱动支持矩阵、专属命名空间与连接连通性全方位自检诊断探针 |
+| **`--format`** | `str` | - | `text` | 配合 `--doctor` 使用的输出格式：`text`（终端 Rich 彩色卡片）或 `json`（机器可读标准 JSON） |
+| **`--version`, `-v`** | `flag` | - | - | 显示服务版本、Python 运行时、SQLAlchemy 版本与操作系统架构基线并退出 |
+| **`--server-name`** | `str` | `MCP_RDBMS_SERVER_NAME` | `mcp-server-rdbms` | 自定义当前 MCP 服务的显示名称，多服务独立挂载时供大模型精准识别业务归属 |
+| **`--server-instructions`** | `str` | `MCP_RDBMS_SERVER_INSTRUCTIONS` | `None` | 面向大模型注入的专属业务指令，消除大模型在跨服务调度时的理解歧义 |
+| **`--db-url`** | `str` | `MCP_RDBMS_DB_URL` | `None` | 单数据库连接串 URL，优先级高于环境变量 |
 | **`--config`** | `str` | `MCP_RDBMS_CONFIG` | `None` | 多数据库 YAML 或 JSON 配置文件路径 |
-| **`--allow-dml`** | `flag` | - | `False` | 显式开启数据增删改（DML）权限门禁 |
-| **`--allow-ddl`** | `flag` | - | `False` | 显式开启结构变更（DDL）权限门禁 |
-| **`--transport`** | `str` | - | `stdio` | 客户端通信协议，支持 `stdio`、`sse`、`streamable-http` |
-| **`--host`** | `str` | - | `127.0.0.1` | SSE 或 HTTP 服务的绑定监听地址 |
-| **`--port`** | `int` | - | `8000` | SSE 或 HTTP 服务的监听端口 |
+| **`--allow-dml`** | `flag` | `MCP_RDBMS_ALLOW_DML` | `False` | 显式开启数据增删改（DML）权限门禁 |
+| **`--allow-ddl`** | `flag` | `MCP_RDBMS_ALLOW_DDL` | `False` | 显式开启表结构变更（DDL）权限门禁 |
+| **`--transport`** | `str` | `MCP_RDBMS_TRANSPORT` | `stdio` | 客户端通信协议，支持 `stdio`、`sse`、`streamable-http` |
+| **`--host`** | `str` | `MCP_RDBMS_SERVER_HOST` | `127.0.0.1` | SSE 或 HTTP 服务的绑定监听地址 |
+| **`--port`** | `int` | `MCP_RDBMS_SERVER_PORT` | `8000` | SSE 或 HTTP 服务的监听端口 |
+| **`--audit-log`** | `str` | `MCP_RDBMS_AUDIT_LOG_FILE` | `rdbms_mcp_audit.log` | 审计日志落盘文件路径 |
+| **`--audit-mode`** | `str` | `MCP_RDBMS_AUDIT_MODE` | `mutation` | 审计范围：`mutation`（仅 DML/DDL 变更）、`all`（全量含只读分析）、`off`（完全关闭） |
+| **`--audit-max-bytes`** | `int` | `MCP_RDBMS_AUDIT_MAX_BYTES` | `10485760` (10MB) | 单文件触发日志切片轮转的最大字节数 |
+| **`--audit-backup-count`** | `int` | `MCP_RDBMS_AUDIT_BACKUP_COUNT` | `5` | 本地保留的历史审计切片日志副本数量 |
 
 ---
 
-## 🔒 生产级安全建议与合规审计
+## 🔒 生产级安全建议与分级合规审计
 
-1. **默认强只读原则**：在生产环境中，如无明确数据修改需求，请勿传入 `--allow-dml` 与 `--allow-ddl`。默认模式下即使大模型生成恶意 SQL，也会在 AST 语法分析阶段被物理拦截；
-2. **连接密码脱敏保证**：大模型调用 `db_info` 探查网络拓扑时，所有连接凭据均强制替换为 `***`，杜绝大模型在上下文回显或外部泄露凭据；
-3. **审计追溯 (`rdbms_mcp_audit.log`)**：服务自动在运行目录下生成并维护 `rdbms_mcp_audit.log` 审计流水文件，每一行均以格式化 JSON 记录操作状态：
+1. **默认强只读原则**：在生产环境中，如无明确数据修改需求，请勿传入 `--allow-dml` 与 `--allow-ddl`。默认模式下即使大模型生成恶意 SQL，也会在 AST 语法分析阶段被物理拦截并附带自愈重定向指引；
+2. **连接密码脱敏保证**：大模型调用 `db_info` 或读取 `rdbms://connections` 资源探查网络拓扑时，所有连接凭据均强制替换为 `***`，彻底杜绝大模型在上下文回显或外部泄露凭据；
+3. **专属命名空间隔离**：严格采用 `MCP_RDBMS_*` 命名空间，物理级过滤宿主机环境中的通用无前缀变量（如 `DATABASE_URL`），彻底消除跨进程环境污染与意外串库风险；
+4. **分级操作审计与防爆截断 (`rdbms_mcp_audit.log`)**：
+   - 服务支持三档分级审计模式：`mutation`（仅变更, 默认）、`all`（包含只读查询与 EXPLAIN）与 `off`（关闭）；
+   - **审计防爆截断保护**：单条 SQL 超过 4096 字符或批量操作超过 100 条时自动智能折叠与截断，物理级防御磁盘被异常大日志打爆；
+   - **切片安全轮转**：单文件达到 10MB 时自动切片轮转并保留最近 5 份历史归档；
+   - **智能体自省资源**：大模型可通过标准 MCP 只读资源 `rdbms://audit/recent` 零 Tool Call 自主查阅最近执行的审计流水：
    ```json
-   {"timestamp":"2026-10-04T08:30:00Z","operation":"sql_dml","db":"pg_main","statements":["UPDATE users SET status = 1 WHERE id = 100"],"status":"SUCCESS","rows_affected":1,"duration_ms":12.5,"error":null}
+   {
+     "timestamp": "2026-10-14T08:30:00Z",
+     "operation": "sql_dml",
+     "db": "pg_main",
+     "statements": ["UPDATE users SET status = 1 WHERE id = 100"],
+     "status": "SUCCESS",
+     "rows_affected": 1,
+     "duration_ms": 12.5,
+     "error": null
+   }
    ```
 
 ---

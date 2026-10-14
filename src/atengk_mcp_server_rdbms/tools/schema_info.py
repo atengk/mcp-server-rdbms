@@ -284,7 +284,7 @@ def register_schema_tools(server: MCPServer, registry: ConnectionRegistry) -> No
 
     @server.tool(
         name="schema_list_tables",
-        description="获取指定模式下的数据表/视图清单与表注释。支持基于通配符（如 user_*）的 pattern 内存过滤；默认不加载外键以保障大库极速响应，显式指定 include_foreign_keys=True 时聚合全库外键拓扑。",
+        description="获取指定模式下的数据表/视图清单与表注释。支持多数据库路由（通过 db 参数指定连接别名，缺省时路由至默认库）；支持基于通配符（如 user_*）的 pattern 内存过滤；默认不加载外键以保障大库极速响应，显式指定 include_foreign_keys=True 时聚合全库外键拓扑。",
     )
     async def schema_list_tables(
         schema: str | None = None,
@@ -319,7 +319,7 @@ def register_schema_tools(server: MCPServer, registry: ConnectionRegistry) -> No
 
     @server.tool(
         name="schema_describe_table",
-        description="一站式获取指定数据表的列定义明细（类型、可空性、默认值）、主键约束、外键约束与全部索引。",
+        description="一站式获取指定数据表的列定义明细（类型、可空性、默认值）、主键约束、外键约束与全部索引。支持多数据库路由（通过 db 参数指定目标数据库连接别名，缺省时路由至默认库）。",
     )
     async def schema_describe_table(
         table_name: str,

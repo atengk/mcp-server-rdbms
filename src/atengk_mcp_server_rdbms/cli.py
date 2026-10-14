@@ -48,6 +48,8 @@ CLI_EPILOG = """
   MCP_RDBMS_SERVER_PORT        HTTP/SSE 监听端口 (默认 8000)
   MCP_RDBMS_AUDIT_LOG_FILE     审计日志路径 (默认 rdbms_mcp_audit.log)
   MCP_RDBMS_AUDIT_MODE         审计范围 (mutation / all / off)
+  MCP_RDBMS_SERVER_NAME        自定义服务实例显示名称（多服务独立挂载时区分业务）
+  MCP_RDBMS_SERVER_INSTRUCTIONS 面向大模型的专属业务提示词指令
 
 可选驱动一键安装指引 (Dialect Drivers):
   PostgreSQL:   uv pip install "atengk-mcp-server-rdbms[postgres]"
@@ -110,6 +112,18 @@ def parse_args(args: list[str] | None = None) -> argparse.Namespace:
         choices=["text", "json"],
         default="text",
         help="配合 --doctor 使用的输出格式（text 终端富文本卡片, json 机器可读格式）",
+    )
+    parser.add_argument(
+        "--server-name",
+        type=str,
+        default=None,
+        help="自定义 MCP 服务实例显示名称（默认: mcp-server-rdbms，支持环境变量 MCP_RDBMS_SERVER_NAME）",
+    )
+    parser.add_argument(
+        "--server-instructions",
+        type=str,
+        default=None,
+        help="面向大模型注入的专属业务系统指令（支持环境变量 MCP_RDBMS_SERVER_INSTRUCTIONS）",
     )
     parser.add_argument(
         "--db-url",
@@ -280,6 +294,8 @@ def main(args: list[str] | None = None) -> None:
         allow_dml=cfg.allow_dml,
         allow_ddl=cfg.allow_ddl,
         audit=audit,
+        name=cfg.server_name,
+        instructions=cfg.server_instructions,
     )
 
     try:

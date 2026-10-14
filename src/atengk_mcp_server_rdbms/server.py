@@ -16,6 +16,12 @@ from atengk_mcp_server_rdbms.tools.sql_ddl import register_ddl_tools
 from atengk_mcp_server_rdbms.tools.sql_dml import register_dml_tools
 from atengk_mcp_server_rdbms.tools.sql_query import register_query_tools
 
+DEFAULT_INSTRUCTIONS: str = (
+    "通用关系型数据库 MCP 服务，提供只读探查与受控操作。"
+    "支持多数据库路由，可通过 rdbms://connections 资源或 db_info 工具查看已配置连接清单；"
+    "在多数据库环境下，请在调用工具时显式传入 db 参数指定目标数据库连接别名。"
+)
+
 
 def create_server(
     registry: ConnectionRegistry | None = None,
@@ -23,6 +29,7 @@ def create_server(
     allow_ddl: bool = False,
     audit: AuditLogger | None = None,
     name: str = "mcp-server-rdbms",
+    instructions: str | None = None,
 ) -> MCPServer:
     """创建并装配 FastMCP 服务实例.
 
@@ -30,7 +37,8 @@ def create_server(
     @param allow_dml: 是否激活 DML 数据修改操作（默认 False 保护）
     @param allow_ddl: 是否激活 DDL 结构定义操作（默认 False 保护）
     @param audit: 独立审计记录器实例
-    @param name: 服务名称
+    @param name: 服务名称（支持通过 --server-name 或 MCP_RDBMS_SERVER_NAME 定制）
+    @param instructions: 面向大模型的系统指令（支持通过 --server-instructions 或 MCP_RDBMS_SERVER_INSTRUCTIONS 定制）
     @return: 已装配领域工具的 MCPServer 实例
     """
     if registry is None:
@@ -38,7 +46,7 @@ def create_server(
 
     server = MCPServer(
         name=name,
-        instructions="通用关系型数据库 MCP 服务，提供只读探查与受控操作。",
+        instructions=instructions or DEFAULT_INSTRUCTIONS,
     )
 
     # 1. 装配 db_ 命名空间核心探测工具 (db_info)

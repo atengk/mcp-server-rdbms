@@ -28,3 +28,5 @@ class ServerRuntimeConfig(NamedTuple):
     audit_mode: str = "mutation"
     audit_max_bytes: int = 10 * 1024 * 1024
     audit_backup_count: int = 5
+    server_name: str = "mcp-server-rdbms"
+    server_instructions: str | None = None

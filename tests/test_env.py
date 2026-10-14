@@ -299,3 +299,14 @@ def test_build_registry_with_multi_db_env():
     assert profiles["analytics"].is_default is True
     assert profiles["primary"].is_default is False
 
+
+def test_resolve_runtime_config_server_metadata():
+    """测试通过环境变量配置 server_name 与 server_instructions."""
+    env = {
+        "MCP_RDBMS_SERVER_NAME": "my-custom-mcp",
+        "MCP_RDBMS_SERVER_INSTRUCTIONS": "自定义业务提示指令",
+    }
+    cfg = resolve_runtime_config(args=None, env=env)
+    assert cfg.server_name == "my-custom-mcp"
+    assert cfg.server_instructions == "自定义业务提示指令"
+
