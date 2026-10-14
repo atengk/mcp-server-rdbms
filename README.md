@@ -4,7 +4,7 @@
   <a href="https://pypi.org/project/atengk-mcp-server-rdbms/"><img src="https://img.shields.io/pypi/v/atengk-mcp-server-rdbms.svg?color=blue&label=PyPI" alt="PyPI version"></a>
   <a href="https://github.com/atengk/mcp-server-rdbms/releases"><img src="https://img.shields.io/github/v/release/atengk/mcp-server-rdbms?style=flat-square&color=blue&label=Release" alt="GitHub Release"></a>
   <a href="https://github.com/atengk/mcp-server-rdbms/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/atengk/mcp-server-rdbms/ci.yml?branch=main&label=CI&style=flat-square" alt="CI Status"></a>
-  <a href="https://github.com/atengk/mcp-server-rdbms/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg?style=flat-square" alt="License"></a>
+  <a href="https://github.com/atengk/mcp-server-rdbms/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg?style=flat-square" alt="License"></a>
   <a href="https://github.com/atengk/mcp-server-rdbms/actions"><img src="https://img.shields.io/badge/tests-187%20passed-brightgreen.svg?style=flat-square" alt="Tests"></a>
   <a href="https://modelcontextprotocol.io/"><img src="https://img.shields.io/badge/MCP-1.1.0-purple.svg?style=flat-square" alt="MCP Protocol"></a>
   <a href="./CONTRIBUTING.md"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square" alt="PRs Welcome"></a>
@@ -516,5 +516,5 @@ uv pip install "atengk-mcp-server-rdbms[all]"         # 一键安装所有驱动
 | **🤝 参与贡献** | [CONTRIBUTING.md](./CONTRIBUTING.md) | 遵循 GitHub Flow 与 Conventional Commits 提交规范 |
 | **📜 行为准则** | [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md) | 遵循 Contributor Covenant 2.1，营造开放包容的协作氛围 |
 | **🔒 安全策略** | [SECURITY.md](./SECURITY.md) | 负责任漏洞披露 (Responsible Disclosure)，48 小时响应闭环 |
-| **📄 开源许可** | [LICENSE](./LICENSE) | 基于 MIT 协议开源，欢迎自由使用、扩展与集成 |
+| **📄 开源许可** | [LICENSE](./LICENSE) / [NOTICE](./NOTICE) | 基于 Apache 2.0 协议开源，包含专利防卫与商标保护，欢迎自由商业与个人使用 |
 

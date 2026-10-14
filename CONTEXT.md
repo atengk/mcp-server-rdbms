@@ -160,6 +160,11 @@ _避免使用_: 动态构建物 (Dynamic Builds)、随地打包 (Ad-hoc Packagin
 通过本地 Git Hook 在每次代码提交时拦截不符合 Conventional Commits 规范的提交信息以保障版本日志自动化的守门机制。
 _避免使用_: 提交拦截器 (Commit Blocker)、信息验证器 (Message Validator)
 
+**专利防卫许可 (Patent Retaliation License)**:
+基于 Apache License 2.0 构建的开源法律授权体系，提供显式专利授权与专利反诉自动终止条款，保障原作者与采用者法律安全。
+_避免使用_: 基础开源协议 (Basic License)、通用授权 (General License)
+
+
 
 
 
