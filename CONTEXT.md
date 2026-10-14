@@ -144,6 +144,23 @@ _避免使用_: 表名正则匹配 (Table Regex)、模糊搜索 (Fuzzy Search)
 在安全序列化层对超长纯文本字段提供字符长度探测与安全截断标注，防止单字段冲垮客户端对话上下文的防护机制。
 _避免使用_: 字符串截断器 (String Truncater)、大字段剪裁 (Bigfield Clipper)
 
+**二元工作流 (Dual Workflows)**:
+将开源工程自动化流水分离为聚焦 PR 规范与质量门禁的 CI 流程，以及聚焦不可变制品与多渠道分发的统合 Release 编排流程。
+_避免使用_: 混合流水线 (Mixed Pipeline)、单体 CI/CD (Monolithic CI/CD)
+
+**短路直通网关 (Path Fast-Pass Gateway)**:
+基于改动文件路径动态分析，在纯文档或静态资源变更时秒级放行流水线，消除分支保护规则死锁的机制。
+_避免使用_: 文档跳过器 (Docs Skipper)、假绿灯 (Fake Green)
+
+**不可变发行制品 (Immutable Release Artifacts)**:
+在统合发版流水线中单次编译构建并计算 SHA-256 校验和，供 GitHub Release、PyPI 及 Docker 多路复用分发的归档产物。
+_避免使用_: 动态构建物 (Dynamic Builds)、随地打包 (Ad-hoc Packaging)
+
+**提交守护守门 (Commit-Msg Guard)**:
+通过本地 Git Hook 在每次代码提交时拦截不符合 Conventional Commits 规范的提交信息以保障版本日志自动化的守门机制。
+_避免使用_: 提交拦截器 (Commit Blocker)、信息验证器 (Message Validator)
+
+
 
 
 

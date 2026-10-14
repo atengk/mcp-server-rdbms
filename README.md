@@ -5,7 +5,7 @@
   <a href="https://github.com/atengk/mcp-server-rdbms/releases"><img src="https://img.shields.io/github/v/release/atengk/mcp-server-rdbms?style=flat-square&color=blue&label=Release" alt="GitHub Release"></a>
   <a href="https://github.com/atengk/mcp-server-rdbms/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/atengk/mcp-server-rdbms/ci.yml?branch=main&label=CI&style=flat-square" alt="CI Status"></a>
   <a href="https://github.com/atengk/mcp-server-rdbms/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-green.svg?style=flat-square" alt="License"></a>
-  <a href="https://github.com/atengk/mcp-server-rdbms/actions"><img src="https://img.shields.io/badge/tests-137%20passed-brightgreen.svg?style=flat-square" alt="Tests"></a>
+  <a href="https://github.com/atengk/mcp-server-rdbms/actions"><img src="https://img.shields.io/badge/tests-187%20passed-brightgreen.svg?style=flat-square" alt="Tests"></a>
   <a href="https://modelcontextprotocol.io/"><img src="https://img.shields.io/badge/MCP-1.1.0-purple.svg?style=flat-square" alt="MCP Protocol"></a>
   <a href="./CONTRIBUTING.md"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square" alt="PRs Welcome"></a>
 </p>

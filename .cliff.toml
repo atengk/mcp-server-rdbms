@@ -3,26 +3,28 @@
 # 详见: https://git-cliff.org/docs/configuration
 # ==============================================================================
 
-[changelog]
-header = """
-# 更新日志 (Changelog)
+[remote.github]
+owner = "atengk"
+repo = "mcp-server-rdbms"
 
-本项目所有显著变更均由 [git-cliff](https://github.com/orhun/git-cliff) 基于 Conventional Commits 提交历史自动生成。
-版本格式严格遵循 [语义化版本 2.0.0 (SemVer)](https://semver.org/lang/zh-CN/) 规范。
-\n
-"""
+[changelog]
+header = ""
 body = """
-{% if version %}\
-    ## [{{ version | trim_start_matches(pat="v") }}] - {{ timestamp | date(format="%Y-%m-%d") }}
-{% else %}\
-    ## [未发布变更 (Unreleased)]
-{% endif %}\
-{% for group, commits in commits | group_by(attribute="group") %}
-    ### {{ group }}
-    {% for commit in commits %}
-        - {% if commit.scope %}**{{ commit.scope }}**: {% endif %}{{ commit.message | upper_first }} ({{ commit.id | truncate(length=7, end="") }})\
-    {% endfor %}
+{% for entry in commits | commit_groups(groups=commit_parsers_groups) %}
+### {{ entry.group | trim }}
+{% for commit in entry.commits %}
+- {% if commit.scope %}**{{ commit.scope }}**: {% endif %}{{ commit.message | upper_first }}\
+  {% if commit.remote.pr_number %} in #{{ commit.remote.pr_number }}{% endif %}\
+  {% if commit.remote.username %} by @{{ commit.remote.username }}{% endif %}\
+  {% if not commit.remote.pr_number %} ({{ commit.id | truncate(length=7, end="") }}){% endif %}\
 {% endfor %}
+{% endfor %}
+{% if github.contributors | filter(attribute="is_first_time", value=true) | length != 0 %}
+### 🎉 新贡献者致谢 (New Contributors)
+{% for contributor in github.contributors | filter(attribute="is_first_time", value=true) %}
+- 感谢 @{{ contributor.username }} 提交的首次贡献！
+{% endfor %}
+{% endif %}\n
 """
 trim = true
 
@@ -34,8 +36,7 @@ filter_unconventional = false
 split_commits = false
 
 commit_parsers = [
-  { message = "^Merge", skip = true },
-  { message = "^merge", skip = true },
+  { message = "^.*!:|BREAKING CHANGE", group = "💥 破坏性更新 (Breaking Changes)" },
   { message = "^feat", group = "🚀 新特性 (Features)" },
   { message = "^fix", group = "🐛 缺陷修复 (Bug Fixes)" },
   { message = "^perf", group = "⚡ 性能优化 (Performance)" },
@@ -53,4 +54,4 @@ commit_parsers = [
 # 过滤与标签匹配规则
 protect_breaking_commits = false
 filter_commits = false
-tag_pattern = "v[0-9].*"
+tag_pattern = "v?[0-9].*"

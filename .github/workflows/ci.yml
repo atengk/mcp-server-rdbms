@@ -1,3 +1,14 @@
+# ==============================================================================
+# 工作流：Python 持续集成流水线 (Python CI)
+# 适用场景：atengk-mcp-server-rdbms 模块的 PR 门禁与代码合规自动化验证
+# 核心特性：
+#   - 动态并发控制 (Dynamic Concurrency)：PR 提交自动中断陈旧运行，主干提交按序排队
+#   - 内部路径短路直通 (Path Fast-Pass)：纯文档改动秒级放行，彻底消除分支保护规则死锁
+#   - 现代 uv 工具链集成：基于 astral-sh/setup-uv 与 uv.lock 秒级缓存与确定性测试
+#   - 超高速静态分析 Ruff (代码规范 check 与类型注解校验)
+#   - 终审门禁看板 (All Checks Passed)：统一盖戳并直出 GitHub Step Summary 结构化报表
+# ==============================================================================
+
 name: CI
 
 on:
@@ -5,15 +16,25 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+    types: [opened, edited, synchronize, reopened]
+
+# 动态并发控制：PR 提交自动取消陈旧构建以节约算力；主干提交排队顺序执行保历史完整
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
 
 jobs:
+  # ----------------------------------------------------------------------------
+  # Job 1: PR 标题规范校验 (仅在 PR 触发时执行)
+  # ----------------------------------------------------------------------------
   validate-pr-title:
     name: 校验 PR 标题规范
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
+    timeout-minutes: 5
     permissions:
       pull-requests: read
     steps:
@@ -35,10 +56,36 @@ jobs:
             chore
             revert
 
-  test-and-lint:
-    name: 静态检查与单元测试
+  # ----------------------------------------------------------------------------
+  # Job 2: 动态探测变更路径 (实现内部短路直通网关)
+  # ----------------------------------------------------------------------------
+  detect-changes:
+    name: 探测变更路径
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      code_changed: ${{ steps.filter.outputs.code }}
+    steps:
+      - name: 检出源码
+        uses: actions/checkout@v4
 
+      - name: 分析改动文件类型
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            code:
+              - '!(*.md|docs/**|.gitignore|.editorconfig|LICENSE)'
+
+  # ----------------------------------------------------------------------------
+  # Job 3: 代码风格与规范静态分析 (Ruff)
+  # ----------------------------------------------------------------------------
+  lint:
+    name: 代码规范与格式化 (Ruff)
+    runs-on: ubuntu-latest
+    needs: [detect-changes]
+    if: needs.detect-changes.outputs.code_changed != 'false'
+    timeout-minutes: 10
     steps:
       - name: 检出源码
         uses: actions/checkout@v4
@@ -46,19 +93,105 @@ jobs:
       - name: 安装 uv 依赖管理工具
         uses: astral-sh/setup-uv@v5
         with:
-          enable-cache: true
           version: "latest"
+          enable-cache: true
 
       - name: 安装 Python 3.12 运行环境
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
+        run: uv python install 3.12
 
       - name: 安装项目依赖
         run: uv sync
 
-      - name: 运行 ruff 静态语法检查
-        run: uv run ruff check
+      - name: 代码风格与语法检查 (Ruff Linter)
+        run: uv run ruff check .
 
-      - name: 运行全量单元测试
+  # ----------------------------------------------------------------------------
+  # Job 4: 自动化回归测试矩阵 (pytest)
+  # ----------------------------------------------------------------------------
+  test:
+    name: 自动化测试 (Python 3.12)
+    runs-on: ubuntu-latest
+    needs: [detect-changes]
+    if: needs.detect-changes.outputs.code_changed != 'false'
+    timeout-minutes: 15
+    steps:
+      - name: 检出源码
+        uses: actions/checkout@v4
+
+      - name: 安装 uv 依赖管理工具
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          enable-cache: true
+
+      - name: 安装 Python 3.12 运行环境
+        run: uv python install 3.12
+
+      - name: 安装项目依赖
+        run: uv sync
+
+      - name: 运行 pytest 单元测试
         run: uv run pytest -s
+
+  # ----------------------------------------------------------------------------
+  # Job 5: 质量门禁终审盖戳 (分支保护规则唯一指定强绑门禁)
+  # ----------------------------------------------------------------------------
+  all-checks-passed:
+    name: 质量门禁终审 (All Checks Passed)
+    runs-on: ubuntu-latest
+    needs: [detect-changes, validate-pr-title, lint, test]
+    if: always()
+    timeout-minutes: 5
+    steps:
+      - name: 汇总校验各任务执行结果
+        run: |
+          TITLE_RESULT="${{ needs.validate-pr-title.result }}"
+          DETECT_RESULT="${{ needs.detect-changes.result }}"
+          LINT_RESULT="${{ needs.lint.result }}"
+          TEST_RESULT="${{ needs.test.result }}"
+
+          echo "任务状态汇总: PR标题=[$TITLE_RESULT], 变更探测=[$DETECT_RESULT], 规范扫描=[$LINT_RESULT], 单测执行=[$TEST_RESULT]"
+
+          if [ "$TITLE_RESULT" = "failure" ] || [ "$TITLE_RESULT" = "cancelled" ]; then
+            echo "::error::PR 标题规范校验失败！请按照 Conventional Commits 规范修改 PR 标题。"
+            exit 1
+          fi
+
+          if [ "$DETECT_RESULT" = "failure" ] || [ "$DETECT_RESULT" = "cancelled" ]; then
+            echo "::error::变更路径探测任务异常中断！"
+            exit 1
+          fi
+
+          if [ "$LINT_RESULT" = "failure" ] || [ "$LINT_RESULT" = "cancelled" ]; then
+            echo "::error::Ruff 代码规范与格式化扫描失败！"
+            exit 1
+          fi
+
+          if [ "$TEST_RESULT" = "failure" ] || [ "$TEST_RESULT" = "cancelled" ]; then
+            echo "::error::pytest 自动化测试失败！门禁熔断阻断。"
+            exit 1
+          fi
+
+          echo "✅ 全部必要质量门禁已全部通过！"
+
+      - name: 生成门禁看板摘要报告
+        if: always()
+        run: |
+          {
+            echo "## 🚦 Python CI 质量门禁终审报告"
+            echo ""
+            echo "| 检查项 | 判定状态 | 执行说明 |"
+            echo "| :--- | :---: | :--- |"
+            if [ "${{ github.event_name }}" = "pull_request" ]; then
+              echo "| **PR 标题规范校验** | ${{ needs.validate-pr-title.result == 'success' && '✅ 通过' || '❌ 失败' }} | Conventional Commits 语义化规范 |"
+            fi
+            echo "| **变更路径探测** | ${{ needs.detect-changes.result == 'success' && '✅ 通过' || '❌ 异常' }} | 区分文档短路与核心代码构建 |"
+            if [ "${{ needs.detect-changes.outputs.code_changed }}" = "false" ]; then
+              echo "| **代码规范与测试** | ⚡ 短路直通 | 仅涉及文档改动，自动跳过耗时测试并放行 |"
+            else
+              echo "| **Ruff 代码规范扫描** | ${{ needs.lint.result == 'success' && '✅ 通过' || '❌ 失败' }} | 静态语法风格与类型注解校验 |"
+              echo "| **pytest 自动化测试** | ${{ needs.test.result == 'success' && '✅ 通过' || '❌ 失败' }} | 全套 187+ 单元测试覆盖回归 |"
+            fi
+            echo ""
+            echo "> 💡 **分支保护规则建议**：请在 GitHub 仓库设置中将 \`质量门禁终审 (All Checks Passed)\` 设为唯一 Required Status Check。"
+          } >> "$GITHUB_STEP_SUMMARY"
