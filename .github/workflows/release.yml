@@ -92,11 +92,23 @@ jobs:
       raw_version: ${{ steps.meta.outputs.raw_version }}
       is_prerelease: ${{ steps.meta.outputs.is_prerelease }}
       has_dockerfile: ${{ steps.probe.outputs.has_dockerfile }}
+      has_pypi: ${{ steps.pypi-probe.outputs.has_pypi }}
     steps:
       - name: 检出源码 (完整历史供元数据解析)
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: 探测 PyPI 发布凭据与配置
+        id: pypi-probe
+        env:
+          PYPI_API_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+        run: |
+          if [ -n "$PYPI_API_TOKEN" ] || [ "${{ vars.ENABLE_PYPI_PUBLISH }}" = "true" ]; then
+            echo "has_pypi=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_pypi=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: 探测项目 Dockerfile 存在性
         id: probe
@@ -216,7 +228,7 @@ jobs:
     name: 发布至 PyPI 官方源
     runs-on: ubuntu-latest
     needs: [build-artifacts]
-    if: vars.ENABLE_PYPI_PUBLISH == 'true' || secrets.PYPI_API_TOKEN != ''
+    if: needs.build-artifacts.outputs.has_pypi == 'true'
     timeout-minutes: 10
     permissions:
       contents: read
@@ -310,15 +322,44 @@ jobs:
         run: |
           TAG="${{ needs.build-artifacts.outputs.tag_name }}"
           REPO_LC="${GITHUB_REPOSITORY,,}"
+
+          if [ "${{ needs.build-artifacts.outputs.is_prerelease }}" = "true" ]; then
+            RELEASE_KIND="🧪 Pre-release"
+          else
+            RELEASE_KIND="🎉 稳定正式版"
+          fi
+
+          if [ "${{ needs.publish-release.result }}" = "success" ]; then
+            GH_RELEASE_STATUS="✅ 成功"
+          else
+            GH_RELEASE_STATUS="❌ 失败"
+          fi
+
+          if [ "${{ needs.publish-pypi.result }}" = "success" ]; then
+            PYPI_STATUS="✅ 成功"
+          elif [ "${{ needs.publish-pypi.result }}" = "skipped" ]; then
+            PYPI_STATUS="⚡ 已跳过 (未启用)"
+          else
+            PYPI_STATUS="❌ 失败"
+          fi
+
+          if [ "${{ needs.publish-docker.result }}" = "success" ]; then
+            DOCKER_STATUS="✅ 成功"
+          elif [ "${{ needs.publish-docker.result }}" = "skipped" ]; then
+            DOCKER_STATUS="⚡ 已跳过 (无 Dockerfile)"
+          else
+            DOCKER_STATUS="❌ 失败"
+          fi
+
           {
             echo "## 🚀 Python 统合发版全景看板"
             echo ""
             echo "| 发版维度 | 状态 | 详细信息 |"
             echo "| :--- | :---: | :--- |"
-            echo "| **发版版本** | \`$TAG\` | ${{ needs.build-artifacts.outputs.is_prerelease == 'true' && '🧪 Pre-release' || '🎉 稳定正式版' }} |"
-            echo "| **GitHub Release** | ${{ needs.publish-release.result == 'success' && '✅ 成功' || '❌ 失败' }} | 更新日志已挂载不可变构建附件与 SHA-256 校验和 |"
-            echo "| **PyPI 官方分发** | ${{ needs.publish-pypi.result == 'success' && '✅ 成功' || (needs.publish-pypi.result == 'skipped' && '⚡ 已跳过 (未启用)' || '❌ 失败') }} | OIDC / Token 发布至 pypi.org |"
-            echo "| **GHCR 容器镜像** | ${{ needs.publish-docker.result == 'success' && '✅ 成功' || (needs.publish-docker.result == 'skipped' && '⚡ 已跳过 (无 Dockerfile)' || '❌ 失败') }} | 多架构 \`linux/amd64,arm64\` 镜像已推送 |"
+            echo "| **发版版本** | \`$TAG\` | $RELEASE_KIND |"
+            echo "| **GitHub Release** | $GH_RELEASE_STATUS | 更新日志已挂载不可变构建附件与 SHA-256 校验和 |"
+            echo "| **PyPI 官方分发** | $PYPI_STATUS | OIDC / Token 发布至 pypi.org |"
+            echo "| **GHCR 容器镜像** | $DOCKER_STATUS | 多架构 \`linux/amd64,arm64\` 镜像已推送 |"
             echo ""
             echo "### 📦 快速拉取与安装验证"
             echo '```bash'
