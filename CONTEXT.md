@@ -200,15 +200,14 @@ _避免使用_: 审计查看工具 (Audit Tool)、日志接口 (Log API)
 在审计落盘前对超长 SQL 语句（超过 4096 字符）与超量批量操作（超过 100 条）实施智能字符折叠与数量截断、物理级防御磁盘被异常大文本日志击穿的安全守护机制。
 _避免使用_: 字符剪裁器 (String Cutter)、批量限制器 (Batch Limiter)
 
+**环境体检探针 (Doctor Diagnostics)**:
+在服务运行前对 Python 基础环境、SQLAlchemy 运行时、驱动就绪矩阵、专属环境变量命名空间与已配置数据库连通性进行分层全面自检并生成结构化诊断报告的客户端运维探针。
+_避免使用_: 环境自检 (Self-check)、健康检查接口 (Health Check API)、Debug 模式 (Debug Mode)
 
+**驱动矩阵探测器 (Driver Matrix Probe)**:
+静态探测 9 大主流关系型数据库方言驱动的安装就绪状态，对未就绪驱动输出精准一键安装指引并评估当前环境驱动支持度的组件。
+_避免使用_: 驱动检查器 (Driver Checker)、依赖嗅探器 (Dependency Sniffer)
 
-
-
-
-
-
-
-
-
-
-
+**无串库环境审计 (Namespace Hygiene Audit)**:
+在自检中扫描宿主环境，主动发现被废弃或易混淆的通用无前缀变量（如 DATABASE_URL）并告警其已被安全忽略，同时校验专属命名空间合法性的防护审计机制。
+_避免使用_: 变量审计 (Var Audit)、环境清洗 (Env Sanitizer)

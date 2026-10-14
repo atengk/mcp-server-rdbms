@@ -6,6 +6,8 @@ mcp-server-rdbms: 命令行接口解析与启动程序.
 """
 
 import argparse
+import importlib.metadata
+import platform
 import sys
 
 from atengk_mcp_server_rdbms.core.audit import AuditLogger
@@ -14,6 +16,67 @@ from atengk_mcp_server_rdbms.core.env import resolve_runtime_config
 from atengk_mcp_server_rdbms.core.exceptions import DriverMissingError
 from atengk_mcp_server_rdbms.models.config import ServerRuntimeConfig
 from atengk_mcp_server_rdbms.server import create_server
+
+CLI_EPILOG = """
+使用示例 (Examples):
+  1. 默认 stdio 模式启动（本地单库测试）：
+     mcp-server-rdbms --db-url sqlite:///demo.db
+
+  2. 启用 HTTP/SSE 模式并显式开放 DML/DDL 权限：
+     mcp-server-rdbms --db-url "postgresql+psycopg://user:pass@localhost/mydb" \\
+                      --transport sse --host 0.0.0.0 --port 8000 \\
+                      --allow-dml --allow-ddl
+
+  3. 多数据库连接（使用 connections.yaml 配置）：
+     mcp-server-rdbms --config connections.yaml
+
+  4. 运行环境、驱动支持矩阵与数据库连通性全面体检：
+     mcp-server-rdbms --doctor
+     mcp-server-rdbms --doctor --format json
+
+  5. 使用 uvx 零安装随用随跑并挂载驱动：
+     uvx --with pymysql atengk-mcp-server-rdbms --db-url "mysql+pymysql://root:pass@localhost/db"
+
+专属环境变量速查表 (Dedicated Environment Variables):
+  MCP_RDBMS_DB_URL             默认单数据库连接串
+  MCP_RDBMS_DB_<ALIAS>         声明多数据库别名连接（如 MCP_RDBMS_DB_ANALYTICS）
+  MCP_RDBMS_DEFAULT_DB         多库模式下的默认数据库别名
+  MCP_RDBMS_ALLOW_DML          开启数据修改 (DML) 权限 (true/false)
+  MCP_RDBMS_ALLOW_DDL          开启结构变更 (DDL) 权限 (true/false)
+  MCP_RDBMS_TRANSPORT          通信协议 (stdio / sse / streamable-http)
+  MCP_RDBMS_SERVER_HOST        HTTP/SSE 监听地址 (默认 127.0.0.1)
+  MCP_RDBMS_SERVER_PORT        HTTP/SSE 监听端口 (默认 8000)
+  MCP_RDBMS_AUDIT_LOG_FILE     审计日志路径 (默认 rdbms_mcp_audit.log)
+  MCP_RDBMS_AUDIT_MODE         审计范围 (mutation / all / off)
+
+可选驱动一键安装指引 (Dialect Drivers):
+  PostgreSQL:   uv pip install "atengk-mcp-server-rdbms[postgres]"
+  MySQL:        uv pip install "atengk-mcp-server-rdbms[mysql]"
+  Oracle:       uv pip install "atengk-mcp-server-rdbms[oracle]"
+  SQL Server:   uv pip install "atengk-mcp-server-rdbms[mssql]"
+  ClickHouse:   uv pip install "atengk-mcp-server-rdbms[clickhouse]"
+  全量依赖:     uv pip install "atengk-mcp-server-rdbms[all]"
+"""
+
+
+def get_version_string() -> str:
+    """获取格式化的服务版本与运行时运行环境信息.
+
+    @return: 格式化版本信息字符串
+    """
+    try:
+        ver = importlib.metadata.version("atengk-mcp-server-rdbms")
+    except importlib.metadata.PackageNotFoundError:
+        ver = "0.0.0.dev0"
+
+    try:
+        sa_ver = importlib.metadata.version("sqlalchemy")
+    except importlib.metadata.PackageNotFoundError:
+        sa_ver = "未知"
+
+    py_ver = f"{platform.python_version()} ({platform.python_implementation()})"
+    plat = f"{platform.system()} {platform.machine()}"
+    return f"atengk-mcp-server-rdbms v{ver} (Python {py_ver}, SQLAlchemy {sa_ver} on {plat})"
 
 
 def parse_args(args: list[str] | None = None) -> argparse.Namespace:
@@ -24,7 +87,29 @@ def parse_args(args: list[str] | None = None) -> argparse.Namespace:
     """
     parser = argparse.ArgumentParser(
         prog="mcp-server-rdbms",
-        description="通用关系型数据库模型上下文协议 (MCP) 服务",
+        description="通用关系型数据库模型上下文协议 (MCP) 服务 (Universal Relational Database MCP Server)",
+        epilog=CLI_EPILOG,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "--version",
+        "-v",
+        action="version",
+        version=get_version_string(),
+        help="显示服务版本及运行时运行环境信息并退出",
+    )
+    parser.add_argument(
+        "--doctor",
+        action="store_true",
+        default=False,
+        help="执行运行环境、数据库驱动矩阵、环境变量合规性与连接连通性全方位自检诊断探针",
+    )
+    parser.add_argument(
+        "--format",
+        type=str,
+        choices=["text", "json"],
+        default="text",
+        help="配合 --doctor 使用的输出格式（text 终端富文本卡片, json 机器可读格式）",
     )
     parser.add_argument(
         "--db-url",
@@ -151,6 +236,27 @@ def main(args: list[str] | None = None) -> None:
     @param args: 命令行参数，缺省时读取终端参数
     """
     parsed = parse_args(args)
+
+    # 1. 处理 --doctor 自检探针
+    if parsed.doctor:
+        from atengk_mcp_server_rdbms.core.doctor import (
+            DoctorDiagnostic,
+            render_doctor_console,
+        )
+
+        cfg = resolve_runtime_config(args=parsed)
+        registry = build_registry(cfg)
+        try:
+            diag = DoctorDiagnostic(config=cfg, registry=registry)
+            report = diag.diagnose()
+            if parsed.format == "json":
+                sys.stdout.write(report.to_json(indent=2) + "\n")
+            else:
+                render_doctor_console(report)
+            sys.exit(report.exit_code)
+        finally:
+            registry.close_all()
+
     cfg = resolve_runtime_config(args=parsed)
     registry = build_registry(cfg)
 
@@ -186,3 +292,4 @@ def main(args: list[str] | None = None) -> None:
     except KeyboardInterrupt:
         sys.stderr.write("\n服务已由用户主动终止。\n")
         registry.close_all()
+

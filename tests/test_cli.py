@@ -147,3 +147,86 @@ def test_cli_subprocess_missing_driver_exit():
     assert proc.returncode == 1
     assert "缺少数据库驱动支持" in proc.stderr
     assert "uv pip install" in proc.stderr
+
+
+def test_parse_args_doctor_options():
+    """验证 --doctor 与 --format 参数解析正确性."""
+    args = parse_args(["--doctor", "--format", "json"])
+    assert args.doctor is True
+    assert args.format == "json"
+
+    default_args = parse_args([])
+    assert default_args.doctor is False
+    assert default_args.format == "text"
+
+
+def test_cli_subprocess_version_flag():
+    """验证通过真实子进程执行 --version 与 -v 正常输出运行时环境信息."""
+    for flag in ["--version", "-v"]:
+        proc = subprocess.run(
+            [sys.executable, "-m", "atengk_mcp_server_rdbms", flag],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert proc.returncode == 0
+        assert "atengk-mcp-server-rdbms v" in proc.stdout
+        assert "Python" in proc.stdout
+        assert "SQLAlchemy" in proc.stdout
+
+
+def test_cli_subprocess_enhanced_help():
+    """验证 --help 包含增强的使用示例、环境变量速查表与驱动安装指引."""
+    proc = subprocess.run(
+        [sys.executable, "-m", "atengk_mcp_server_rdbms", "--help"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 0
+    assert "使用示例 (Examples)" in proc.stdout
+    assert "专属环境变量速查表 (Dedicated Environment Variables)" in proc.stdout
+    assert "可选驱动一键安装指引 (Dialect Drivers)" in proc.stdout
+    assert "--doctor" in proc.stdout
+
+
+def test_cli_subprocess_doctor_json():
+    """验证通过子进程执行 --doctor --format json 输出结构化且合法的 JSON."""
+    proc = subprocess.run(
+        [sys.executable, "-m", "atengk_mcp_server_rdbms", "--doctor", "--format", "json"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 0
+    import json
+    data = json.loads(proc.stdout)
+    assert "status" in data
+    assert "drivers" in data
+    assert "env_audit" in data
+    assert "connections" in data
+
+
+def test_cli_subprocess_doctor_text_with_db():
+    """验证通过子进程传入 sqlite 内存库执行 --doctor 连通性成功并输出卡片."""
+    env = os.environ.copy()
+    env["PYTHONIOENCODING"] = "utf-8"
+    proc = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "atengk_mcp_server_rdbms",
+            "--db-url",
+            "sqlite:///:memory:",
+            "--doctor",
+        ],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        env=env,
+        check=False,
+    )
+    assert proc.returncode == 0
+    assert "MCP Server RDBMS 运行环境与健康体检探针" in proc.stdout
+    assert "关系型数据库驱动就绪矩阵" in proc.stdout
+    assert "sqlite" in proc.stdout
