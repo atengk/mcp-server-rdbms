@@ -9,6 +9,7 @@ from mcp.server.mcpserver import MCPServer
 
 from atengk_mcp_server_rdbms.core.audit import AuditLogger
 from atengk_mcp_server_rdbms.core.connection import ConnectionRegistry
+from atengk_mcp_server_rdbms.resources.provider import register_resources
 from atengk_mcp_server_rdbms.tools.db_info import register_db_info_tool
 from atengk_mcp_server_rdbms.tools.schema_info import register_schema_tools
 from atengk_mcp_server_rdbms.tools.sql_ddl import register_ddl_tools
@@ -54,5 +55,8 @@ def create_server(
 
     # 5. 装配 sql_ 命名空间 DDL 结构变更工具（受 allow_ddl 门禁控制）(sql_ddl)
     register_ddl_tools(server, registry, allow_ddl=allow_ddl, audit=audit)
+
+    # 6. 装配 MCP 只读模式资源暴露器 (rdbms://connections, rdbms://{db}/schema)
+    register_resources(server, registry)
 
     return server

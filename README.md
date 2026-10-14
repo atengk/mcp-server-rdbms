@@ -94,6 +94,17 @@ flowchart TD
 
 ---
 
+## 📚 MCP 只读资源 (Resources) 契约
+
+服务全面接入标准 MCP Resources 协议，为支持资源挂载的 AI 客户端（如 Claude Desktop、Cursor 等）提供零 Tool Call 秒级注入数据库上下文能力：
+
+| 资源 URI / 模板 | 类型 | 传输格式 | 功能说明与容灾表现 |
+| :--- | :--- | :--- | :--- |
+| `rdbms://connections` | 静态资源 | `application/json` | 输出当前所有已配置数据库连接别名、方言内核、默认库标记与只读状态（密码强制 `***` 掩码脱敏） |
+| `rdbms://{db}/schema` | 动态模板 | `application/json` | 按需获取指定连接的数据库模式名、业务表与视图清单概要及注释。当目标连接不可达或配置不存在时优雅降级返回 `status: "error"` 与错误原因，不导致协议崩溃 |
+
+---
+
 ## 📦 快速安装与运行
 
 推荐使用现代化 Python 工具 [`uv`](https://docs.astral.sh/uv/) / `uvx`，无需在本地手动克隆代码或配置 Python 虚拟环境，一行命令即可秒级启动：

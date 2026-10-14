@@ -8,8 +8,8 @@
 
 `mcp-server-rdbms` 是基于 Python、FastMCP 与 SQLAlchemy 2.0 构建的通用关系型数据库 MCP 服务。
 
-#### 架构四维角色与分工
-1. **协议接入与装配 (`server.py` / `cli.py`)**：负责 FastMCP 实例创建、CLI 参数解析、环境变量分层解析与 6 核心工具挂载，保持轻薄。
+#### 架构五维角色与分工
+1. **协议接入与装配 (`server.py` / `cli.py`)**：负责 FastMCP 实例创建、CLI 参数解析、环境变量分层解析与 6 核心工具及 MCP 资源挂载，保持轻薄。
 2. **核心基础设施 (`core/`)**：
    - `connection.py`：连接池与多库配置中心 (`ConnectionRegistry`)。
    - `guard.py`：基于 `sqlglot` 的 AST 语法树安全分析、只读校验、执行计划修饰过滤与自动 `LIMIT` 重写注入。
@@ -17,7 +17,8 @@
    - `dialect.py`：方言识别与缺失驱动智能拦截提示 (`DialectRegistry`)。
    - `audit.py`：写操作独立审计流水记录器 (`rdbms_mcp_audit.log`)。
 3. **领域工具实现 (`tools/`)**：严格按领域前缀隔离（`db_` / `schema_` / `sql_`）。
-4. **模型与契约 (`models/`)**：配置数据结构与结果载荷定义。
+4. **模式资源暴露器 (`resources/`)**：MCP 标准只读资源挂载点（`rdbms://connections` 与 `rdbms://{db}/schema`），支持智能体零 Tool Call 预装载上下文与故障优雅降级。
+5. **模型与契约 (`models/`)**：配置数据结构与结果载荷定义。
 
 ---
 
@@ -68,6 +69,15 @@
 | `sql_query` | `sql_` | 样本预览、数据采样与安全只读分析（集成 explain 执行计划） | AST 强制只读校验 + 自动 LIMIT（explain 时禁 LIMIT） + 禁锁读与高危函数 + 拦截 ANALYZE/EXECUTE |
 | `sql_dml` | `sql_` | 数据增删改（支持单条/批量与 MERGE） | `--allow-dml` 门禁 + 原子事务 + 禁无 WHERE 与恒真条件 |
 | `sql_ddl` | `sql_` | 表结构定义变更（建表/删表/改表） | `--allow-ddl` 门禁 + 显式确认 + 禁嵌入锁读 |
+
+### 3.1 MCP 只读模式资源契约 (Resources)
+
+服务对外暴露 2 个标准 MCP 只读资源端点，供 AI 客户端在会话启动时零 Tool Call 秒级加载全局数据库背景知识：
+
+| 资源 URI / 模板 | 类型 | 核心职责 | 返回格式与容灾表现 |
+| :--- | :--- | :--- | :--- |
+| `rdbms://connections` | 静态资源 | 查看所有已配置连接别名、方言、默认库与只读状态 | `application/json`，密码强制 `***` 脱敏 |
+| `rdbms://{db}/schema` | 动态模板 | 按需获取指定连接的模式名称、业务表清单与注释概要 | `application/json`，连接异常或不可达时优雅降级返回 `status: "error"` 与错误原因，不崩溃 |
 
 ---
 
