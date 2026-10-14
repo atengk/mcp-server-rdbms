@@ -83,7 +83,9 @@ class DatabaseInfo:
     current_schema: str
     current_user: str
     connection: str = "default"
+    status: str = "connected"
 
     def to_dict(self) -> dict[str, Any]:
         """转换为标准字典载荷."""
         return asdict(self)
+

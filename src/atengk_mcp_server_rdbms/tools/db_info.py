@@ -18,6 +18,7 @@ from atengk_mcp_server_rdbms.core.connection import ConnectionRegistry
 from atengk_mcp_server_rdbms.core.exceptions import (
     ConnectionNotFoundError,
     DriverMissingError,
+    RdbmsMcpError,
 )
 from atengk_mcp_server_rdbms.models.connection import ConnectionSummary, DatabaseInfo
 
@@ -116,11 +117,64 @@ def fetch_database_info(registry: ConnectionRegistry, db_name: str | None) -> di
 
 
 def register_db_info_tool(server: MCPServer, registry: ConnectionRegistry) -> None:
-    """向 FastMCP 服务注册 db_get_info 工具.
+    """向 FastMCP 服务注册 db_ 领域核心探测工具.
 
     @param server: FastMCP 服务实例
     @param registry: 数据库连接注册表
     """
+
+    @server.tool(
+        name="db_info",
+        description="获取数据库环境元数据与连接清单。缺省调用时返回包含全量脱敏连接清单与当前连接状态，发生连接异常时优雅降级；传入 db 参数时精准探查指定连接详情。",
+    )
+    async def db_info(db: str | None = None) -> dict[str, Any]:
+        """获取目标数据库基础环境元数据或连接清单.
+
+        @param db: 目标数据库连接别名，缺省或为空时探查默认数据库并附带全部连接列表
+        @return: 包含 connections 与 current_connection 的汇总字典，或指定连接的详细环境元数据
+        """
+        # 1. 指定明确目标数据库连接时，精准探查（连接失败时向外抛出明确异常）
+        if db is not None and db.strip() != "":
+            try:
+                return await anyio.to_thread.run_sync(fetch_database_info, registry, db)
+            except (DriverMissingError, ConnectionNotFoundError) as exc:
+                raise ToolError(str(exc)) from exc
+            except SQLAlchemyError as exc:
+                raise ToolError(f"数据库执行错误: {exc}") from exc
+
+        # 2. 缺省调用：获取全部连接清单（密码强制安全脱敏）
+        profiles = registry.list_profiles()
+        connections = [
+            ConnectionSummary(
+                name=p.name,
+                dialect=p.dialect,
+                url=p.masked_url,
+                read_only=p.read_only,
+                is_default=(p.name == registry.default_alias),
+            ).to_dict()
+            for p in profiles
+        ]
+
+        # 3. 探查当前默认连接，发生网络或驱动异常时实施优雅降级
+        current_connection: dict[str, Any] | None = None
+        if profiles:
+            default_alias = registry.default_alias
+            try:
+                current_connection = await anyio.to_thread.run_sync(
+                    fetch_database_info, registry, default_alias
+                )
+            except (SQLAlchemyError, RdbmsMcpError, OSError, TimeoutError) as exc:
+                logger.warning("默认数据库探查失败，实施容灾降级: %s", exc)
+                current_connection = {
+                    "connection": default_alias,
+                    "status": "error",
+                    "error": str(exc),
+                }
+
+        return {
+            "connections": connections,
+            "current_connection": current_connection,
+        }
 
     @server.tool(
         name="db_get_info",
@@ -156,3 +210,4 @@ def register_db_info_tool(server: MCPServer, registry: ConnectionRegistry) -> No
             ).to_dict()
             for p in profiles
         ]
+
