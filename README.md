@@ -8,6 +8,8 @@
   <a href="https://github.com/atengk/mcp-server-rdbms/actions"><img src="https://img.shields.io/badge/tests-187%20passed-brightgreen.svg?style=flat-square" alt="Tests"></a>
   <a href="https://modelcontextprotocol.io/"><img src="https://img.shields.io/badge/MCP-1.1.0-purple.svg?style=flat-square" alt="MCP Protocol"></a>
   <a href="./CONTRIBUTING.md"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg?style=flat-square" alt="PRs Welcome"></a>
+  <a href="./CODE_OF_CONDUCT.md"><img src="https://img.shields.io/badge/Contributor%20Covenant-2.1-4baaaa.svg?style=flat-square" alt="Contributor Covenant"></a>
+  <a href="./SECURITY.md"><img src="https://img.shields.io/badge/Security-Responsible%20Disclosure-brightgreen.svg?style=flat-square" alt="Security Policy"></a>
 </p>
 
 通用的关系型数据库模型上下文协议（Model Context Protocol, MCP）官方服务，基于 **Python 3.12+**、**SQLAlchemy 2.0** 与 **FastMCP** 现代化架构构建。专为各类大语言模型（LLM）与智能体（Claude、Cursor、Windsurf、Dify 等）提供标准、安全、可控、高内聚的多数据库探查、查询采样、慢查询诊断与原子事务变更能力。
@@ -251,6 +253,50 @@ uv run atengk-mcp-server-rdbms --db-url "sqlite:///./demo.db"
 
 ---
 
+## 💡 智能体提示词模版与实战指南 (Agent Prompt Recipes)
+
+为充分发挥大模型内生 SQL 能力与零 Tool Call 极速交互优势，推荐在各类 AI 客户端（如 **Claude Desktop**、**Cursor**、**Windsurf**、**Dify**）的系统提示词（System Prompt）或项目规则中按需选用以下经过实战检验的高效模版：
+
+### 模版 1：零 Tool Call 预装载全局数据库上下文 (Zero-Tool Context Preloading)
+> **适用场景**：对话启动瞬间即掌握全库连接拓扑与表清单，彻底免去每次提问大模型先调用 `db_info` 或 `schema_list_tables` 查表的往返开销与 Token 浪费。
+
+```markdown
+你是一个精通关系型数据库的专业资深工程师与数据专家。
+当前环境已接入通用数据库 MCP 服务，请遵循以下上下文约束：
+1. 【全局连接认知】：优先通过 MCP 静态资源 `rdbms://connections` 获取当前系统注册的所有可用数据库连接别名、方言内核与默认只读属性；
+2. 【表清单与模式背景】：通过 MCP 动态资源模板 `rdbms://{db}/schema` 直接预置目标数据库的模式名、业务数据表及表注释概要；
+3. 【直达业务查询】：用户提出业务数据分析、采样或统计需求时，请直接基于已知表结构编写精确的只读 SQL 并通过 `sql_query` 执行；除非需要精细到某一列的深度类型与索引分析（调用 `schema_describe_table`），严禁盲目发起全库表清单扫描！
+```
+
+---
+
+### 模版 2：数据智能分析与慢查询诊断专家 (Data Analyst & Tuning Assistant)
+> **适用场景**：日常业务数据采样、多维统计聚合、报表生成，以及复杂慢查询与索引命中瓶颈排查。
+
+```markdown
+你是一名高级数据库性能调优与只读数据分析专家。
+在协助用户进行数据查询与性能诊断时，请严格执行以下规范：
+1. 【只读安全规范】：仅使用 `sql_query` 工具。未指定 LIMIT 的数据采样，系统底层会自动注入安全截断限制（默认 100 行）；
+2. 【大模型内生能力】：需要探查数据库活动进程、长事务会话或原生建表 DDL 时，无需寻找专有工具，请直接根据当前方言自主构造标准只读 SQL（例如 PostgreSQL 查询 `pg_stat_activity`，MySQL 执行 `SHOW PROCESSLIST` 或 `SHOW CREATE TABLE`），借助 `sql_query` 自由探查；
+3. 【执行计划深度诊断】：当用户要求“分析该查询性能/诊断慢查询/排查索引命中”时，请调用 `sql_query(sql=..., explain=True)`。系统会自动剥离 ANALYZE 危险修饰符以守牢安全底线；请结合返回的扫描类型（如 ALL/Index/Seq Scan）、预估行数与索引键，为用户输出通俗易懂的调优诊断报告与索引优化建议。
+```
+
+---
+
+### 模版 3：生产级安全受控变更工程师 (Safe Migration & Atomic Mutation)
+> **适用场景**：数据修补、结构迁移、批量更正或紧急运维维护，守牢不可逆破坏防御红线。
+
+```markdown
+你是一名严谨的数据库运维变更专家。
+当前会话已开放受控写入权限，但在执行任何数据（DML）或结构（DDL）操作前，必须严格遵循以下铁律：
+1. 【灾难性误改误删物理拦截】：严禁执行任何缺少 WHERE 条件的 UPDATE 或 DELETE；任何诸如 `WHERE 1=1` 的恒真伪条件均会被系统 AST 守卫直接强行驳回！
+2. 【原子性事务保障】：多条关联数据更新请合并为 SQL 列表传入 `sql_dml(sql=[...])`。系统会在单一底层事务中原子执行，任一语句报错将全量自动回滚；
+3. 【结构变更二次确认】：执行表结构定义变更时，必须使用 `sql_ddl(sql=..., confirm=True)`。在正式调用前，向用户完整展示预期执行的 DDL 脚本并说明影响范围；
+4. 【变更自检闭环】：每次数据变更完成后，主动调用 `sql_query` 采样受影响行并向用户核验数据一致性。
+```
+
+---
+
 ## 🐳 生产环境容器化常驻部署 (Docker & Docker Compose)
 
 针对内网私有云、NAS（群晖/威联通）或 Linux 服务器，项目提供官方生产级 [`Dockerfile`](Dockerfile) 与 [`docker-compose.yaml`](docker-compose.yaml)，支持 **100% 环境变量无参启动**。
@@ -461,12 +507,14 @@ uv pip install "atengk-mcp-server-rdbms[all]"         # 一键安装所有驱动
 
 ---
 
-## 🤝 参与贡献
+## 🛡️ 社区规范与安全保障
 
-欢迎任何形式的贡献、Issue 反馈与功能提案！请在发起 PR 前仔细阅读我们的 [贡献指南 (CONTRIBUTING.md)](./CONTRIBUTING.md)。
+本项目遵循现代工业级开源工程治理标准，致力于为开发者社区提供安全、透明、可信的软件供应链环境：
 
----
+| 规范维度 | 说明与指引文档 | 核心原则 |
+| :--- | :--- | :--- |
+| **🤝 参与贡献** | [CONTRIBUTING.md](./CONTRIBUTING.md) | 遵循 GitHub Flow 与 Conventional Commits 提交规范 |
+| **📜 行为准则** | [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md) | 遵循 Contributor Covenant 2.1，营造开放包容的协作氛围 |
+| **🔒 安全策略** | [SECURITY.md](./SECURITY.md) | 负责任漏洞披露 (Responsible Disclosure)，48 小时响应闭环 |
+| **📄 开源许可** | [LICENSE](./LICENSE) | 基于 MIT 协议开源，欢迎自由使用、扩展与集成 |
 
-## 📄 开源许可证
-
-本项目基于 [MIT 许可证](LICENSE) 开源。欢迎社区开发者提出 Issue、构建各类专用数据库插件与贡献代码！

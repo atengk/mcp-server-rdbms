@@ -112,7 +112,8 @@ mcp-server-rdbms: 模块核心职责说明.
 2. **测试优先级**：
    - 核心首测 `tests/test_guard.py`：测试各种 SQL（只读、CTE、注入、多语句、无 WHERE 的 UPDATE/DELETE）的 AST 校验与注入；
    - 其次测试 `tests/test_connection.py`：多库路由与缺失驱动智能指引；
-   - 最后测试 `tests/test_tools.py`：FastMCP 6 核心工具端到端调用。
+   - 模式资源测试 `tests/test_resources.py`：MCP 只读静态资源与动态模板装配及容灾降级；
+   - 核心工具测试 `tests/test_tools.py` 与 `tests/test_query_tools.py`：FastMCP 6 核心工具端到端调用。
 3. **日常验证命令**：
    ```powershell
    # 运行完整单元测试
@@ -127,6 +128,7 @@ mcp-server-rdbms: 模块核心职责说明.
 ## 6. Git 提交与版本管理纪律
 
 - **严禁自主静默提交**：日常代码修改停留在工作区供审阅；只有在用户明确下达“提交/commit”指令时，方可执行提交。
+- **本地提交守门 (Git Hook)**：仓库通过 `.githooks/commit-msg` 实施本地提交说明强校验，克隆后必须已执行 `git config core.hooksPath .githooks`，不合规的提交信息将在本地被物理拦截。
 - **精准暂存**：严禁 `git add .` 或 `git add -A`，必须显式指定目标文件路径。
 - **提交信息规范**：遵循 Conventional Commits 格式 `<type>(<scope>): <中文描述>`，例如：
   - `feat(guard): 实现基于 sqlglot 的 AST 只读语法树校验与 LIMIT 注入`
