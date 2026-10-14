@@ -209,7 +209,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: 创建 GitHub Release 并挂载附件
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ needs.build-artifacts.outputs.tag_name }}
           name: ${{ needs.build-artifacts.outputs.tag_name }}
