@@ -285,6 +285,47 @@ def resolve_runtime_config(
     else:
         port = 8000
 
+    arg_audit_log = getattr(args, "audit_log", None) if args else None
+    arg_audit_mode = getattr(args, "audit_mode", None) if args else None
+    arg_audit_max_bytes = getattr(args, "audit_max_bytes", None) if args else None
+    arg_audit_backup_count = getattr(args, "audit_backup_count", None) if args else None
+
+    audit_log_file = (
+        arg_audit_log
+        or get_env("MCP_RDBMS_AUDIT_LOG_FILE", env=source)
+        or "rdbms_mcp_audit.log"
+    )
+
+    audit_mode_raw = (
+        arg_audit_mode
+        or get_env("MCP_RDBMS_AUDIT_MODE", env=source)
+        or "mutation"
+    )
+    audit_mode_clean = str(audit_mode_raw).lower().strip()
+    audit_mode = audit_mode_clean if audit_mode_clean in {"mutation", "all", "off"} else "mutation"
+
+    audit_max_bytes_env = get_env("MCP_RDBMS_AUDIT_MAX_BYTES", env=source)
+    if arg_audit_max_bytes is not None:
+        audit_max_bytes = arg_audit_max_bytes
+    elif audit_max_bytes_env:
+        try:
+            audit_max_bytes = int(audit_max_bytes_env)
+        except ValueError:
+            audit_max_bytes = 10 * 1024 * 1024
+    else:
+        audit_max_bytes = 10 * 1024 * 1024
+
+    audit_backup_count_env = get_env("MCP_RDBMS_AUDIT_BACKUP_COUNT", env=source)
+    if arg_audit_backup_count is not None:
+        audit_backup_count = arg_audit_backup_count
+    elif audit_backup_count_env:
+        try:
+            audit_backup_count = int(audit_backup_count_env)
+        except ValueError:
+            audit_backup_count = 5
+    else:
+        audit_backup_count = 5
+
     return ServerRuntimeConfig(
         config_file=config_file,
         db_url=db_url,
@@ -295,4 +336,8 @@ def resolve_runtime_config(
         port=port,
         multi_db_urls=multi_db_urls,
         default_db=default_db,
+        audit_log_file=audit_log_file,
+        audit_mode=audit_mode,
+        audit_max_bytes=audit_max_bytes,
+        audit_backup_count=audit_backup_count,
     )

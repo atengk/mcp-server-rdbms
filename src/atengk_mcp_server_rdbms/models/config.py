@@ -24,3 +24,7 @@ class ServerRuntimeConfig(NamedTuple):
     port: int
     multi_db_urls: dict[str, str] | None = None
     default_db: str | None = None
+    audit_log_file: str = "rdbms_mcp_audit.log"
+    audit_mode: str = "mutation"
+    audit_max_bytes: int = 10 * 1024 * 1024
+    audit_backup_count: int = 5

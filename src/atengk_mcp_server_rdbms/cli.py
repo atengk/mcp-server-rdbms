@@ -8,6 +8,7 @@ mcp-server-rdbms: 命令行接口解析与启动程序.
 import argparse
 import sys
 
+from atengk_mcp_server_rdbms.core.audit import AuditLogger
 from atengk_mcp_server_rdbms.core.connection import ConnectionRegistry
 from atengk_mcp_server_rdbms.core.env import resolve_runtime_config
 from atengk_mcp_server_rdbms.core.exceptions import DriverMissingError
@@ -60,13 +61,38 @@ def parse_args(args: list[str] | None = None) -> argparse.Namespace:
         "--host",
         type=str,
         default=None,
-        help="HTTP/SSE 监听主机地址（默认: 127.0.0.1，支持环境变量 MCP_RDBMS_SERVER_HOST / HOST）",
+        help="HTTP/SSE 监听主机地址（默认: 127.0.0.1，支持环境变量 MCP_RDBMS_SERVER_HOST）",
     )
     parser.add_argument(
         "--port",
         type=int,
         default=None,
-        help="HTTP/SSE 监听端口（默认: 8000，支持环境变量 MCP_RDBMS_SERVER_PORT / PORT）",
+        help="HTTP/SSE 监听端口（默认: 8000，支持环境变量 MCP_RDBMS_SERVER_PORT）",
+    )
+    parser.add_argument(
+        "--audit-log",
+        type=str,
+        default=None,
+        help="审计日志输出文件路径（默认: rdbms_mcp_audit.log，支持环境变量 MCP_RDBMS_AUDIT_LOG_FILE）",
+    )
+    parser.add_argument(
+        "--audit-mode",
+        type=str,
+        choices=["mutation", "all", "off"],
+        default=None,
+        help="审计记录范围模式（默认: mutation 仅变更, all 全量含只读查询, off 关闭）",
+    )
+    parser.add_argument(
+        "--audit-max-bytes",
+        type=int,
+        default=None,
+        help="单文件触发切片轮转的最大字节数（默认: 10485760 字节/10MB）",
+    )
+    parser.add_argument(
+        "--audit-backup-count",
+        type=int,
+        default=None,
+        help="审计日志保留的历史切片副本数（默认: 5）",
     )
 
     return parser.parse_args(args)
@@ -136,10 +162,18 @@ def main(args: list[str] | None = None) -> None:
             sys.stderr.write(f"\n[启动失败] {exc}\n\n")
             sys.exit(1)
 
+    audit = AuditLogger(
+        log_file=cfg.audit_log_file,
+        mode=cfg.audit_mode,
+        max_bytes=cfg.audit_max_bytes,
+        backup_count=cfg.audit_backup_count,
+    )
+
     server = create_server(
         registry,
         allow_dml=cfg.allow_dml,
         allow_ddl=cfg.allow_ddl,
+        audit=audit,
     )
 
     try:

@@ -5,6 +5,7 @@ mcp-server-rdbms: 只读 SQL 查询执行、多格式结果集与慢查询熔断
 @since 2026-10-04
 """
 
+import time
 from typing import Any, Literal
 
 import anyio
@@ -13,6 +14,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 from sqlalchemy import Engine, text
 from sqlalchemy.exc import SQLAlchemyError
 
+from atengk_mcp_server_rdbms.core.audit import AuditLogger, audit_logger
 from atengk_mcp_server_rdbms.core.connection import ConnectionRegistry
 from atengk_mcp_server_rdbms.core.dialect import DialectRegistry
 from atengk_mcp_server_rdbms.core.exceptions import (
@@ -62,12 +64,18 @@ def _execute_explain_sync(
         return cols, rows
 
 
-def register_query_tools(server: MCPServer, registry: ConnectionRegistry) -> None:
+def register_query_tools(
+    server: MCPServer,
+    registry: ConnectionRegistry,
+    audit: AuditLogger | None = None,
+) -> None:
     """向 FastMCP 服务注册 sql_query 与 sql_explain 工具.
 
     @param server: FastMCP 服务实例
     @param registry: 数据库连接注册表
+    @param audit: 独立审计流水记录器
     """
+    active_audit = audit or audit_logger
 
     @server.tool(
         name="sql_query",
@@ -94,6 +102,8 @@ def register_query_tools(server: MCPServer, registry: ConnectionRegistry) -> Non
         """
         # 1. 超时时限阈值收敛（1 ~ 120 秒）
         timeout_seconds = max(0.001, min(timeout, 120.0))
+        start_time = time.perf_counter()
+        target_db = db or registry.default_alias or "default"
 
         try:
             # 2. 获取数据库引擎与方言
@@ -136,6 +146,16 @@ def register_query_tools(server: MCPServer, registry: ConnectionRegistry) -> Non
             # 4. 安全类型序列化与目标格式渲染
             formatted_data = SafeSerializer.format_rows(rows, format_type=format)
             is_truncated = (not explain) and (len(rows) >= limit)
+            duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+
+            await active_audit.record_async(
+                operation="sql_query",
+                db=target_db,
+                statements=[sql],
+                status="SUCCESS",
+                rows_affected=len(rows),
+                duration_ms=duration_ms,
+            )
 
             return QueryResult(
                 row_count=len(rows),
@@ -146,8 +166,40 @@ def register_query_tools(server: MCPServer, registry: ConnectionRegistry) -> Non
             ).to_dict()
 
         except (SecurityViolationError, DriverMissingError, ConnectionNotFoundError) as exc:
+            duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+            await active_audit.record_async(
+                operation="sql_query",
+                db=target_db,
+                statements=[sql],
+                status="FAILED",
+                rows_affected=0,
+                duration_ms=duration_ms,
+                error=str(exc),
+            )
             raise ToolError(str(exc)) from exc
         except SQLAlchemyError as exc:
+            duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+            await active_audit.record_async(
+                operation="sql_query",
+                db=target_db,
+                statements=[sql],
+                status="FAILED",
+                rows_affected=0,
+                duration_ms=duration_ms,
+                error=str(exc),
+            )
             err_label = "执行计划生成失败" if explain else "SQL 查询执行失败"
             raise ToolError(f"{err_label}: {exc}") from exc
+        except ToolError as exc:
+            duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
+            await active_audit.record_async(
+                operation="sql_query",
+                db=target_db,
+                statements=[sql],
+                status="FAILED",
+                rows_affected=0,
+                duration_ms=duration_ms,
+                error=str(exc),
+            )
+            raise
 

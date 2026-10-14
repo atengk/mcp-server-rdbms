@@ -188,6 +188,18 @@ _避免使用_: 版本冻结 (Version Freeze)、镜像锁死 (Image Lock)
 在 CI/CD 流水线中针对具备强协议握手或状态解包依赖的成对工作流动作（如 upload-artifact 与 download-artifact）实施协同一致性升级，严禁单侧跨大版本孤立升级引发流水线断裂的工程纪律。
 _避免使用_: 单边升级 (Unilateral Upgrade)、动作混用 (Action Mixing)
 
+**分级审计模式 (Graded Audit Mode)**:
+支持 `mutation`（仅写操作）、`all`（包含只读查询）与 `off`（关闭审计）三档动态分级的操作审计运行机制，兼顾合规深度与运行性能。
+_避免使用_: 审计开关 (Audit Switch)、日志级别 (Log Level)
+
+**审计资源暴露器 (Audit Resource Provider)**:
+将本地审计日志文件抽象并挂载为 MCP 标准只读资源端点（`rdbms://audit/recent`），供 AI 智能体零 Tool Call 自主查阅近期执行流水与历史记录的协议适配层。
+_避免使用_: 审计查看工具 (Audit Tool)、日志接口 (Log API)
+
+**审计防爆截断器 (Audit Truncation Guard)**:
+在审计落盘前对超长 SQL 语句（超过 4096 字符）与超量批量操作（超过 100 条）实施智能字符折叠与数量截断、物理级防御磁盘被异常大文本日志击穿的安全守护机制。
+_避免使用_: 字符剪裁器 (String Cutter)、批量限制器 (Batch Limiter)
+
 
 
 

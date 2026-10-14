@@ -43,8 +43,10 @@
    - `sql_dml` 接受单条或批量 SQL，**必须**在单一事务块中执行，任何一条语句失败必须全量自动回滚 (`ROLLBACK`)；
    - 静态 AST 检测**强制拦截**无 `WHERE` 条件或退化为恒真条件（如 `1=1`、`true`）的 `UPDATE` 与 `DELETE` 语句；
    - 支持复合写 `MERGE` 语句，并强制校验 `ON` 关联条件非空且非恒真。
-5. **变更独立审计落盘 (Audit Trail Rule)**：
-   - 任何 `sql_dml` 与 `sql_ddl` 执行（无论成功或抛出异常），均需通过 `core/audit.py` 写入本地 `rdbms_mcp_audit.log` 审计流水。
+5. **变更独立审计落盘与分级审计 (Audit Trail & Graded Mode Rule)**：
+   - 任何 `sql_dml` 与 `sql_ddl` 执行（无论成功或抛出异常），均需通过 `core/audit.py` 写入本地审计流水；
+   - 支持分级模式（`MCP_RDBMS_AUDIT_MODE={mutation|all|off}`），`all` 模式下自动纳入 `sql_query` 只读分析；
+   - 强制启用语句防爆截断保护，单条 SQL 超 4096 字符或批量超 100 条时自动折叠，守护磁盘空间。
 6. **缺失驱动友好拦截 (Fail-Friendly Rule)**：
    - 当遇到用户配置了未安装驱动的连接串（如 `oracle+oracledb://...`）触发 `NoSuchModuleError` 时，**严禁**直接暴露底层堆栈；
    - 必须通过 `DialectRegistry` 捕获并输出结构化提示，明确告知用户执行 `uv pip install "mcp-server-rdbms[dialect]"` 安装对应扩展。
@@ -80,12 +82,13 @@
 
 ### 3.1 MCP 只读模式资源契约 (Resources)
 
-服务对外暴露 2 个标准 MCP 只读资源端点，供 AI 客户端在会话启动时零 Tool Call 秒级加载全局数据库背景知识：
+服务对外暴露 3 个标准 MCP 只读资源端点，供 AI 客户端在会话启动时零 Tool Call 秒级加载全局数据库背景知识：
 
 | 资源 URI / 模板 | 类型 | 核心职责 | 返回格式与容灾表现 |
 | :--- | :--- | :--- | :--- |
 | `rdbms://connections` | 静态资源 | 查看所有已配置连接别名、方言、默认库与只读状态 | `application/json`，密码强制 `***` 脱敏 |
 | `rdbms://{db}/schema` | 动态模板 | 按需获取指定连接的模式名称、业务表清单与注释概要 | `application/json`，连接异常或不可达时优雅降级返回 `status: "error"` 与错误原因，不崩溃 |
+| `rdbms://audit/recent` | 静态资源 | 查看服务近期执行的 SQL 与变更审计流水 | `application/json`，支持防爆截断与优雅降级返回空数组，不崩溃 |
 
 ---
 

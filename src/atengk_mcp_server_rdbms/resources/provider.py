@@ -12,6 +12,7 @@ import anyio
 from mcp.server.mcpserver import MCPServer
 from sqlalchemy.exc import SQLAlchemyError
 
+from atengk_mcp_server_rdbms.core.audit import AuditLogger, audit_logger
 from atengk_mcp_server_rdbms.core.connection import ConnectionRegistry
 from atengk_mcp_server_rdbms.core.exceptions import (
     ConnectionNotFoundError,
@@ -23,15 +24,22 @@ from atengk_mcp_server_rdbms.tools.schema_info import fetch_tables_summary
 logger = logging.getLogger(__name__)
 
 
-def register_resources(server: MCPServer, registry: ConnectionRegistry) -> None:
+def register_resources(
+    server: MCPServer,
+    registry: ConnectionRegistry,
+    audit: AuditLogger | None = None,
+) -> None:
     """向 FastMCP 服务注册只读 MCP Resources 协议支持.
 
     1. 挂载 rdbms://connections 静态资源：暴露当前全量连接清单与状态；
-    2. 挂载 rdbms://{db}/schema 动态资源模板：暴露指定数据库的表清单与注释概要。
+    2. 挂载 rdbms://{db}/schema 动态资源模板：暴露指定数据库的表清单与注释概要；
+    3. 挂载 rdbms://audit/recent 静态资源：暴露近期执行的 SQL 与变更审计流水。
 
     @param server: FastMCP 服务实例
     @param registry: 数据库连接注册表
+    @param audit: 独立审计流水记录器
     """
+    active_audit = audit or audit_logger
 
     @server.resource(
         "rdbms://connections",
@@ -108,4 +116,32 @@ def register_resources(server: MCPServer, registry: ConnectionRegistry) -> None:
                 "tables": [],
             }
 
+        return json.dumps(payload, ensure_ascii=False, indent=2)
+
+    @server.resource(
+        "rdbms://audit/recent",
+        name="recent_audit_logs",
+        title="近期操作审计流水",
+        description="获取服务近期执行的 SQL 与数据变更审计流水记录（默认最多 50 条）",
+        mime_type="application/json",
+    )
+    async def get_recent_audit_resource() -> str:
+        """获取近期数据操作与变更审计流水的只读结构化资源."""
+        try:
+            events = await active_audit.get_recent_events_async(limit=50)
+            payload = {
+                "audit_mode": active_audit.mode,
+                "log_file": str(active_audit.log_path),
+                "total": len(events),
+                "events": events,
+            }
+        except (OSError, ValueError, TypeError) as exc:
+            logger.warning("获取审计流水资源失败: %s", exc)
+            payload = {
+                "audit_mode": getattr(active_audit, "mode", "unknown"),
+                "log_file": str(getattr(active_audit, "log_path", "")),
+                "error": f"读取审计日志失败: {exc}",
+                "total": 0,
+                "events": [],
+            }
         return json.dumps(payload, ensure_ascii=False, indent=2)

@@ -48,7 +48,7 @@ def create_server(
     register_schema_tools(server, registry)
 
     # 3. 装配 sql_ 命名空间只读查询与分析工具 (sql_query，含 explain 模式)
-    register_query_tools(server, registry)
+    register_query_tools(server, registry, audit=audit)
 
     # 4. 装配 sql_ 命名空间 DML 变更工具（受 allow_dml 门禁控制）(sql_dml)
     register_dml_tools(server, registry, allow_dml=allow_dml, audit=audit)
@@ -56,7 +56,7 @@ def create_server(
     # 5. 装配 sql_ 命名空间 DDL 结构变更工具（受 allow_ddl 门禁控制）(sql_ddl)
     register_ddl_tools(server, registry, allow_ddl=allow_ddl, audit=audit)
 
-    # 6. 装配 MCP 只读模式资源暴露器 (rdbms://connections, rdbms://{db}/schema)
-    register_resources(server, registry)
+    # 6. 装配 MCP 只读模式资源暴露器 (rdbms://connections, rdbms://{db}/schema, rdbms://audit/recent)
+    register_resources(server, registry, audit=audit)
 
     return server
