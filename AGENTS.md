@@ -8,15 +8,15 @@
 
 `mcp-server-rdbms` 是基于 Python、FastMCP 与 SQLAlchemy 2.0 构建的通用关系型数据库 MCP 服务。
 
-### 架构四维角色与分工
-1. **协议接入与装配 (`server.py` / `cli.py`)**：负责 FastMCP 实例创建、CLI 参数解析、环境变量分层解析与 9 核心工具挂载，保持轻薄。
+#### 架构四维角色与分工
+1. **协议接入与装配 (`server.py` / `cli.py`)**：负责 FastMCP 实例创建、CLI 参数解析、环境变量分层解析与 6 核心工具挂载，保持轻薄。
 2. **核心基础设施 (`core/`)**：
    - `connection.py`：连接池与多库配置中心 (`ConnectionRegistry`)。
    - `guard.py`：基于 `sqlglot` 的 AST 语法树安全分析、只读校验、执行计划修饰过滤与自动 `LIMIT` 重写注入。
    - `env.py`：环境变量分层解析、独立字段原子拼装与零依赖本地 `.env` 自适应探测器。
    - `dialect.py`：方言识别与缺失驱动智能拦截提示 (`DialectRegistry`)。
    - `audit.py`：写操作独立审计流水记录器 (`rdbms_mcp_audit.log`)。
-3. **领域工具实现 (`tools/`)**：严格按领域前缀隔离（`db_` / `schema_` / `sql_` / `admin_`）。
+3. **领域工具实现 (`tools/`)**：严格按领域前缀隔离（`db_` / `schema_` / `sql_`）。
 4. **模型与契约 (`models/`)**：配置数据结构与结果载荷定义。
 
 ---
@@ -47,32 +47,27 @@
    - 当遇到用户配置了未安装驱动的连接串（如 `oracle+oracledb://...`）触发 `NoSuchModuleError` 时，**严禁**直接暴露底层丑陋堆栈。
    - 必须通过 `DialectRegistry` 捕获并输出结构化提示，明确告知用户执行 `uv pip install "mcp-server-rdbms[dialect]"` 安装对应扩展。
 7. **执行计划只读防穿透 (Explain Guardrail Rule)**：
-   - `sql_explain` 必须由 `core/guard.py` 的 `validate_explain_query` 进行安全防护。
+   - `sql_query(explain=True)` 必须由 `core/guard.py` 的 `validate_explain_query` 进行安全防护。
    - 严格静态拦截 `ANALYZE` 与 `EXECUTE` 危险修饰符（防御 PostgreSQL 等方言中因 `EXPLAIN ANALYZE` 触发真实数据修改）；
-   - 自动识别并剥离前置 `EXPLAIN`，并强制内层查询必须通过 AST 深度只读验证。
+   - 自动识别并剥离前置 `EXPLAIN`，并强制内层查询必须通过 AST 深度只读验证且绝对不追加外部 `LIMIT`。
 8. **变更日志自动化无状态原则 (Zero-Changelog-File Rule)**：
    - 代码仓库中绝对不保留静态 `CHANGELOG.md` 物理文件，严禁手动创建或提交该文件；
    - 变更日志 100% 依托 Conventional Commits 规范并通过 `.cliff.toml` 由 GitHub Actions 自动化生成至 GitHub Releases；本地预览统一使用 `uvx git-cliff`。
 
 ---
 
-## 3. 精炼 9 核心工具契约
+## 3. 精炼 6 核心工具契约
 
-项目中仅维护以下 9 个高内聚工具，严禁随意扩散或新增重叠冗余工具：
+项目中仅维护以下 6 个高内聚工具，严禁随意扩散或新增重叠冗余工具：
 
 | 工具名称 | 领域归属 | 核心职责 | 关键安全要求 |
 | :--- | :--- | :--- | :--- |
-| `db_list_connections` | `db_` | 查看全部已配置数据库连接列表及只读属性 | 只读探查，强制密码脱敏 |
-| `db_get_info` | `db_` | 获取方言内核、版本、当前 Schema 与用户 | 只读探查 |
-| `schema_list_tables` | `schema_` | 表/视图清单、注释与外键拓扑关系 | 只读探查，聚合外键关联 |
+| `db_info` | `db_` | 查看数据库连接清单及运行环境元数据，支持容灾优雅降级与定向探查 | 只读探查，强制密码脱敏，短超时容灾降级 |
+| `schema_list_tables` | `schema_` | 表/视图清单与注释，支持通配符模式匹配过滤，按需外键拓扑 | 只读探查，默认免外键扫描消灭 N+1，pattern 内存过滤 |
 | `schema_describe_table` | `schema_` | 列明细、类型、可空性、主键、外键与索引 | 一站式返回全部表元数据 |
-| `sql_query` | `sql_` | 样本预览、数据采样与安全只读分析 | AST 强制只读校验 + 自动 LIMIT + 禁锁读与高危函数 |
-| `sql_explain` | `sql_` | 获取执行计划以分析慢查询 | 仅允许执行 EXPLAIN 语句 |
+| `sql_query` | `sql_` | 样本预览、数据采样与安全只读分析（集成 explain 执行计划） | AST 强制只读校验 + 自动 LIMIT（explain 时禁 LIMIT） + 禁锁读与高危函数 + 拦截 ANALYZE/EXECUTE |
 | `sql_dml` | `sql_` | 数据增删改（支持单条/批量与 MERGE） | `--allow-dml` 门禁 + 原子事务 + 禁无 WHERE 与恒真条件 |
 | `sql_ddl` | `sql_` | 表结构定义变更（建表/删表/改表） | `--allow-ddl` 门禁 + 显式确认 + 禁嵌入锁读 |
-| `admin_list_running_queries` | `admin_` | 观测活动进程与长查询 | 只读观测，对 SQLite 等库优雅降级 |
-
-
 
 ---
 
@@ -107,7 +102,7 @@ mcp-server-rdbms: 模块核心职责说明.
 2. **测试优先级**：
    - 核心首测 `tests/test_guard.py`：测试各种 SQL（只读、CTE、注入、多语句、无 WHERE 的 UPDATE/DELETE）的 AST 校验与注入；
    - 其次测试 `tests/test_connection.py`：多库路由与缺失驱动智能指引；
-   - 最后测试 `tests/test_tools.py`：FastMCP 8 核心工具端到端调用。
+   - 最后测试 `tests/test_tools.py`：FastMCP 6 核心工具端到端调用。
 3. **日常验证命令**：
    ```powershell
    # 运行完整单元测试

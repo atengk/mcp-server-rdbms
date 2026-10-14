@@ -9,7 +9,6 @@ from mcp.server.mcpserver import MCPServer
 
 from atengk_mcp_server_rdbms.core.audit import AuditLogger
 from atengk_mcp_server_rdbms.core.connection import ConnectionRegistry
-from atengk_mcp_server_rdbms.tools.admin_queries import register_admin_tools
 from atengk_mcp_server_rdbms.tools.db_info import register_db_info_tool
 from atengk_mcp_server_rdbms.tools.schema_info import register_schema_tools
 from atengk_mcp_server_rdbms.tools.sql_ddl import register_ddl_tools
@@ -41,22 +40,19 @@ def create_server(
         instructions="通用关系型数据库 MCP 服务，提供只读探查与受控操作。",
     )
 
-    # 1. 装配 db_ 命名空间核心探测工具
+    # 1. 装配 db_ 命名空间核心探测工具 (db_info)
     register_db_info_tool(server, registry)
 
-    # 2. 装配 schema_ 命名空间表与结构全息探查工具
+    # 2. 装配 schema_ 命名空间表与结构全息探查工具 (schema_list_tables, schema_describe_table)
     register_schema_tools(server, registry)
 
-    # 3. 装配 sql_ 命名空间只读查询与分析工具
+    # 3. 装配 sql_ 命名空间只读查询与分析工具 (sql_query，含 explain 模式)
     register_query_tools(server, registry)
 
-    # 4. 装配 sql_ 命名空间 DML 变更工具（受 allow_dml 门禁控制）
+    # 4. 装配 sql_ 命名空间 DML 变更工具（受 allow_dml 门禁控制）(sql_dml)
     register_dml_tools(server, registry, allow_dml=allow_dml, audit=audit)
 
-    # 5. 装配 sql_ 命名空间 DDL 结构变更工具（受 allow_ddl 门禁控制）
+    # 5. 装配 sql_ 命名空间 DDL 结构变更工具（受 allow_ddl 门禁控制）(sql_ddl)
     register_ddl_tools(server, registry, allow_ddl=allow_ddl, audit=audit)
-
-    # 6. 装配 admin_ 命名空间运维观测工具
-    register_admin_tools(server, registry)
 
     return server

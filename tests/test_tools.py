@@ -12,6 +12,7 @@ from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
 from atengk_mcp_server_rdbms.core.connection import ConnectionRegistry
+from atengk_mcp_server_rdbms.server import create_server
 from atengk_mcp_server_rdbms.tools.db_info import register_db_info_tool
 
 
@@ -25,54 +26,34 @@ def test_setup():
 
 
 @pytest.mark.asyncio
-async def test_db_get_info_sqlite_memory(test_setup):
-    server, _ = test_setup
-    result = await server.call_tool("db_get_info", {})
-    data = result.structured_content
-
-    assert data["dialect"] == "sqlite"
-    assert data["driver"] == "pysqlite"
-    assert data["current_schema"] == "main"
-    assert data["current_user"] == "sqlite"
-    assert data["database"] == ":memory:"
-    assert data["connection"] == "default"
-    assert data["server_version"] != ""
-
-
-@pytest.mark.asyncio
-async def test_db_get_info_offloaded_to_threadpool(test_setup):
+async def test_db_info_offloaded_to_threadpool(test_setup):
     server, _ = test_setup
     with patch("anyio.to_thread.run_sync", wraps=__import__("anyio").to_thread.run_sync) as spy_run_sync:
-        result = await server.call_tool("db_get_info", {})
+        result = await server.call_tool("db_info", {})
         assert spy_run_sync.called
-        assert result.structured_content["dialect"] == "sqlite"
+        assert result.structured_content["current_connection"]["dialect"] == "sqlite"
 
 
 @pytest.mark.asyncio
-async def test_db_get_info_missing_driver():
+async def test_server_six_tools_contract():
+    """验证服务启动装配后，对外暴露且仅暴露严格的 6 个标准核心工具."""
     registry = ConnectionRegistry()
-    registry.register_url("oracle+oracledb://scott:tiger@localhost:1521/xe", name="oracle_db")
-    server = MCPServer(name="test-server")
-    register_db_info_tool(server, registry)
+    registry.register_url("sqlite:///:memory:", name="default")
+    server = create_server(registry)
 
-    with pytest.raises(ToolError) as exc_info:
-        await server.call_tool("db_get_info", {"db": "oracle_db"})
+    tools = await server.list_tools()
+    tool_names = {t.name for t in tools}
 
-    error_text = str(exc_info.value)
-    assert "缺少数据库驱动支持" in error_text
-    assert "uv pip install" in error_text
+    assert len(tools) == 6
+    assert tool_names == {
+        "db_info",
+        "schema_list_tables",
+        "schema_describe_table",
+        "sql_query",
+        "sql_dml",
+        "sql_ddl",
+    }
 
-
-@pytest.mark.asyncio
-async def test_db_get_info_connection_not_found():
-    registry = ConnectionRegistry()
-    server = MCPServer(name="test-server")
-    register_db_info_tool(server, registry)
-
-    with pytest.raises(ToolError) as exc_info:
-        await server.call_tool("db_get_info", {"db": "not_exists"})
-
-    assert "未找到指定的数据库连接配置" in str(exc_info.value)
 
 
 @pytest.mark.asyncio

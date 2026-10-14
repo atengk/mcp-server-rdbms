@@ -108,8 +108,8 @@ def test_registry_from_file_invalid_format(tmp_path: Path):
 
 
 @pytest.mark.asyncio
-async def test_db_list_connections_tool_masking():
-    """验证 db_list_connections 工具输出全部连接并强制密码脱敏."""
+async def test_db_info_tool_masking():
+    """验证 db_info 工具输出全部连接并强制密码脱敏."""
     registry = ConnectionRegistry()
     registry.register_url("sqlite:///:memory:", name="local_mem", is_default=True, read_only=False)
     registry.register_url(
@@ -122,9 +122,9 @@ async def test_db_list_connections_tool_masking():
     server = MCPServer(name="test-server")
     register_db_info_tool(server, registry)
 
-    result = await server.call_tool("db_list_connections", {})
+    result = await server.call_tool("db_info", {})
     raw = result.structured_content
-    items = raw if isinstance(raw, list) else raw.get("result", raw)
+    items = raw.get("connections", [])
     assert isinstance(items, list)
     assert len(items) == 2
 
@@ -138,6 +138,7 @@ async def test_db_list_connections_tool_masking():
     assert pg_info["read_only"] is True
     assert "very_sensitive_password" not in pg_info["url"]
     assert "***" in pg_info["url"]
+
 
 
 @pytest.mark.asyncio

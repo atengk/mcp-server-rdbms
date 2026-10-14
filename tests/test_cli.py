@@ -101,21 +101,23 @@ async def test_create_server_end_to_end():
     registry.register_url("sqlite:///:memory:", name="default")
     server = create_server(registry)
 
-    # 验证服务已挂载核心工具
+    # 验证服务已挂载核心 6 工具
     tools = await server.list_tools()
     tool_names = [t.name for t in tools]
-    assert "db_get_info" in tool_names
-    assert "schema_list_tables" in tool_names
-    assert "schema_describe_table" in tool_names
-    assert "sql_query" in tool_names
-    assert "sql_explain" in tool_names
-    assert "sql_dml" in tool_names
-    assert "sql_ddl" in tool_names
-    assert "admin_list_running_queries" in tool_names
+    expected_tools = {
+        "db_info",
+        "schema_list_tables",
+        "schema_describe_table",
+        "sql_query",
+        "sql_dml",
+        "sql_ddl",
+    }
+    assert set(tool_names) == expected_tools
+    assert len(tools) == 6
 
     # 验证直接调用工具
-    result = await server.call_tool("db_get_info", {})
-    assert result.structured_content["dialect"] == "sqlite"
+    result = await server.call_tool("db_info", {})
+    assert result.structured_content["current_connection"]["dialect"] == "sqlite"
 
 
 def test_cli_subprocess_help_flag():

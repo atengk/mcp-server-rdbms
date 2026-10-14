@@ -138,23 +138,6 @@ async def test_sql_query_timeout_breaker(query_setup):
         assert "超时" in str(exc_info.value)
 
 
-@pytest.mark.asyncio
-async def test_sql_explain(query_setup):
-    server, _ = query_setup
-    result = await server.call_tool("sql_explain", {"sql": "SELECT * FROM users WHERE id = 1"})
-    data = result.structured_content
-
-    assert "SELECT * FROM users WHERE id = 1" in data["query"]
-    assert isinstance(data["plan"], list)
-    assert len(data["plan"]) > 0
-
-
-@pytest.mark.asyncio
-async def test_sql_explain_security_violation(query_setup):
-    server, _ = query_setup
-    with pytest.raises(ToolError) as exc_info:
-        await server.call_tool("sql_explain", {"sql": "DROP TABLE users"})
-    assert "只读" in str(exc_info.value)
 
 
 @pytest.mark.asyncio

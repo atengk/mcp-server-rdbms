@@ -22,7 +22,7 @@ from atengk_mcp_server_rdbms.core.exceptions import (
 )
 from atengk_mcp_server_rdbms.core.guard import ASTGuard
 from atengk_mcp_server_rdbms.core.serializer import SafeSerializer
-from atengk_mcp_server_rdbms.models.query import ExplainResult, QueryResult
+from atengk_mcp_server_rdbms.models.query import QueryResult
 
 
 def _execute_query_sync(
@@ -149,43 +149,3 @@ def register_query_tools(server: MCPServer, registry: ConnectionRegistry) -> Non
             err_label = "执行计划生成失败" if explain else "SQL 查询执行失败"
             raise ToolError(f"{err_label}: {exc}") from exc
 
-    @server.tool(
-        name="sql_explain",
-        description="获取指定 SQL 语句的执行计划以辅助分析慢查询原因与索引命中情况。",
-    )
-    async def sql_explain(
-        sql: str,
-        db: str | None = None,
-    ) -> dict[str, Any]:
-        """获取 SQL 执行计划.
-
-        @param sql: 待分析执行计划的 SQL 查询语句
-        @param db: 目标数据库连接别名，缺省时使用默认连接
-        @return: 包含 query 与 plan 的结果字典
-        @throws ToolError: 安全违规或执行计划生成失败时抛出
-        """
-        try:
-            # 1. 获取数据库引擎
-            engine = registry.get_engine(db)
-
-            # 2. AST 纯只读性校验与修饰符安全过滤（杜绝 EXPLAIN ANALYZE 真实写入，提取内层只读语句）
-            safe_sql = ASTGuard.validate_explain_query(sql, dialect=engine.dialect.name)
-
-            # 3. 线程池异步卸载执行 EXPLAIN（配 30 秒熔断防护）
-            with anyio.fail_after(30.0):
-                _cols, plan_rows = await anyio.to_thread.run_sync(
-                    _execute_explain_sync,
-                    engine,
-                    safe_sql,
-                    abandon_on_cancel=True,
-                )
-
-            # 4. 结果序列化
-            serialized_plan = SafeSerializer.serialize_rows(plan_rows)
-
-            return ExplainResult(query=safe_sql, plan=serialized_plan).to_dict()
-
-        except (SecurityViolationError, DriverMissingError, ConnectionNotFoundError) as exc:
-            raise ToolError(str(exc)) from exc
-        except SQLAlchemyError as exc:
-            raise ToolError(f"执行计划生成失败: {exc}") from exc

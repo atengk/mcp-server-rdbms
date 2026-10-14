@@ -176,38 +176,4 @@ def register_db_info_tool(server: MCPServer, registry: ConnectionRegistry) -> No
             "current_connection": current_connection,
         }
 
-    @server.tool(
-        name="db_get_info",
-        description="获取数据库方言类型、内核版本、当前 Schema 及活跃登录用户等基础环境信息。",
-    )
-    async def db_get_info(db: str | None = None) -> dict[str, Any]:
-        """获取目标数据库基础环境信息.
-
-        @param db: 目标数据库连接别名，缺省时探测默认数据库
-        @return: 包含 dialect、driver、server_version、current_schema、current_user 的字典载荷
-        """
-        try:
-            return await anyio.to_thread.run_sync(fetch_database_info, registry, db)
-        except (DriverMissingError, ConnectionNotFoundError) as exc:
-            raise ToolError(str(exc)) from exc
-        except SQLAlchemyError as exc:
-            raise ToolError(f"数据库执行错误: {exc}") from exc
-
-    @server.tool(
-        name="db_list_connections",
-        description="查看全部已配置的数据库连接清单，输出连接别名、方言内核、是否为默认库与只读保护属性。连接密码已强制执行安全掩码脱敏 (***)。",
-    )
-    async def db_list_connections() -> list[dict[str, Any]]:
-        """查看所有已注册数据库连接的脱敏清单."""
-        profiles = registry.list_profiles()
-        return [
-            ConnectionSummary(
-                name=p.name,
-                dialect=p.dialect,
-                url=p.masked_url,
-                read_only=p.read_only,
-                is_default=(p.name == registry.default_alias),
-            ).to_dict()
-            for p in profiles
-        ]
 

@@ -35,7 +35,7 @@ flowchart TD
         ReadOnly["只读语义校验 (Select / CTE With)"]
         LimitInject["自动注入安全 LIMIT 截断 (默认 100 行)"]
         WhereGuard["DML 强制阻断无 WHERE 条件的 UPDATE/DELETE"]
-        ExplainGuard["sql_explain 危险修饰符 (ANALYZE) 拦截与剥离"]
+        ExplainGuard["sql_query explain 危险修饰符 (ANALYZE) 拦截与剥离"]
     end
 
     subgraph EngineLayer ["连接池与多库路由中枢 (core/connection.py)"]
@@ -54,7 +54,7 @@ flowchart TD
 
     Client -->|"JSON-RPC (stdio / sse)"| FastMCP
     Dotenv --> Env --> Registry
-    FastMCP -->|"9 核心工具调用"| GuardLayer
+    FastMCP -->|"6 核心工具调用"| GuardLayer
     GuardLayer -->|"AST 验证通过"| Registry
     Registry --> Pool
     Pool -->|"工作线程池异步卸载 (anyio)"| DatabaseLayer
@@ -74,26 +74,23 @@ flowchart TD
 - 🌐 **多数据库配置中心与连接池自愈**：
   - 支持单库环境变量/CLI 直连，亦支持通过 YAML/JSON 配置文件声明多库路由；
   - 连接池集成 `pool_pre_ping=True` 探针预检与周期回收，毫秒级自愈因外部超时、防火墙丢包或数据库重启导致的死连接。
-- 🔍 **精炼 9 核心工具矩阵**：无二义性、零冗余设计，工具严格按领域命名空间规范组织，模型理解与调用准确率极高。
+- 🔍 **精炼 6 核心工具矩阵**：无二义性、零冗余设计，工具严格按领域命名空间规范组织，模型理解与调用准确率极高。
 - 📝 **变更操作独立审计流水**：所有 DDL 与 DML 操作均异步落盘记录至本地 `rdbms_mcp_audit.log`，包含时间戳、执行 SQL、影响行数与耗时。
 
 ---
 
-## 🛠️ 9 核心工具矩阵全景契约
+## 🛠️ 6 核心工具矩阵全景契约
 
 所有工具均支持可选的 `db` 参数。不传时自动路由到默认连接；传入时精确定位目标多库别名：
 
 | 领域前缀 | 工具名称 | 参数契约 | 功能描述与安全约束 |
 | :--- | :--- | :--- | :--- |
-| **`db_`** | `db_list_connections` | `()` | 查看所有已配置连接别名、方言内核、默认库标识与只读保护状态。**密码强制执行 `***` 安全脱敏掩码** |
-| | `db_get_info` | `(db: str = None)` | 探查目标数据库内核方言、真实版本号、当前 Schema/Database 及活跃登录用户 |
-| **`schema_`** | `schema_list_tables` | `(schema=None, include_views=False, db=None)` | 获取业务数据表与视图清单、表注释并**自动聚合全库外键依赖拓扑**。自动过滤数据库系统保留模式 |
+| **`db_`** | `db_info` | `(db: str = None)` | 一站式探查数据库内核版本、当前 Schema/用户、只读保护及全部已配置连接别名列表（密码强制 `***` 掩码脱敏） |
+| **`schema_`** | `schema_list_tables` | `(schema=None, pattern=None, include_views=False, include_foreign_keys=False, db=None)` | 获取业务数据表与视图清单、表注释并支持模式过滤与可选外键依赖拓扑分析。自动过滤数据库系统保留模式 |
 | | `schema_describe_table` | `(table_name: str, schema=None, db=None)` | 一站式全息探查数据表列明细（类型、可空性、默认值）、主键约束、外键关联与全部索引明细 |
-| **`sql_`** | `sql_query` | `(sql: str, limit: int = 100, format="json", db=None)` | 安全只读数据采样与业务分析，支持复杂 CTE `WITH` 语法。支持 `json` / `markdown` / `csv` 格式，自动序列化 Decimal/时间/BLOB 并**自动注入 LIMIT** |
-| | `sql_explain` | `(sql: str, db=None)` | 执行 `EXPLAIN` 获取数据库原生查询执行计划，辅助分析慢查询与索引命中瓶颈 |
+| **`sql_`** | `sql_query` | `(sql: str, limit: int = 100, format="json", explain: bool = False, db=None)` | 安全只读数据采样与业务分析，支持复杂 CTE `WITH` 语法。支持 `json` / `markdown` / `csv` 格式、自动截断长文本并注入 LIMIT；`explain=True` 时内生获取执行计划 |
 | | `sql_dml` | `(sql: str \| list[str], db=None)` | 原子事务数据增删改（支持单条或批量）。**单步失败全量自动回滚**，受 `--allow-dml` 门禁管控，**强制拦截无 WHERE 条件操作** |
 | | `sql_ddl` | `(sql: str, confirm: bool = False, db=None)` | 结构定义变更（建表、删表、改表）。受 `--allow-ddl` 权限管控并要求 `confirm=True` 二次确认 |
-| **`admin_`** | `admin_list_running_queries` | `(db=None)` | 观测数据库正在运行的长查询与活动会话（针对 SQLite 等轻量库自适应优雅降级） |
 
 ---
 
@@ -437,7 +434,7 @@ uv pip install "atengk-mcp-server-rdbms[all]"         # 一键安装所有驱动
 ## 🔒 生产级安全建议与合规审计
 
 1. **默认强只读原则**：在生产环境中，如无明确数据修改需求，请勿传入 `--allow-dml` 与 `--allow-ddl`。默认模式下即使大模型生成恶意 SQL，也会在 AST 语法分析阶段被物理拦截；
-2. **连接密码脱敏保证**：大模型调用 `db_list_connections` 探查网络拓扑时，所有连接凭据均强制替换为 `***`，杜绝大模型在上下文回显或外部泄露凭据；
+2. **连接密码脱敏保证**：大模型调用 `db_info` 探查网络拓扑时，所有连接凭据均强制替换为 `***`，杜绝大模型在上下文回显或外部泄露凭据；
 3. **审计追溯 (`rdbms_mcp_audit.log`)**：服务自动在运行目录下生成并维护 `rdbms_mcp_audit.log` 审计流水文件，每一行均以格式化 JSON 记录操作状态：
    ```json
    {"timestamp":"2026-10-04T08:30:00Z","operation":"sql_dml","db":"pg_main","statements":["UPDATE users SET status = 1 WHERE id = 100"],"status":"SUCCESS","rows_affected":1,"duration_ms":12.5,"error":null}

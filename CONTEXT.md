@@ -25,7 +25,7 @@ _避免使用_: 批处理脚本 (Batch Script)、多语句执行 (Multi-statemen
 _避免使用_: 驱动加载器 (Driver Loader)、异常处理器 (Error Handler)
 
 **领域命名空间 (Tool Namespace)**:
-按 `db_`、`schema_`、`sql_`、`admin_` 对工具进行职责隔离的结构化前缀体系。
+按 `db_`、`schema_`、`sql_` 对工具进行职责隔离的结构化前缀体系。
 _避免使用_: 工具分类 (Tool Category)、模块前缀 (Module Prefix)
 
 **安全序列化器 (Safe Serializer)**:
@@ -123,6 +123,28 @@ _避免使用_: 混合变更 (Mixed Mutation)、多动作 SQL (Multi-action SQL)
 **纵深防御架构 (Defense-in-Depth Architecture)**:
 在 MCP 服务端 AST 静态结构校验与数据库端账号最小只读特权之间形成互补的双层安全边界体系。
 _避免使用_: 混合防御 (Hybrid Defense)、内外安全机制 (Internal-External Security)
+
+**模式资源暴露器 (Schema Resource Provider)**:
+将连接注册表中的连接列表与表清单映射为 MCP 标准只读 URI 资源的协议适配层。
+_避免使用_: 资源加载器 (Resource Loader)、Schema 资源接口 (Schema Resource API)
+
+**极简六工具矩阵 (Six-Core Tool Arsenal)**:
+基于纯粹语义与读写隔离构建的高内聚 MCP 工具集合（`db_info`、`schema_list_tables`、`schema_describe_table`、`sql_query`、`sql_dml`、`sql_ddl`）。
+_避免使用_: 基础工具集 (Basic Tools)、核心八工具 (Eight Tools)
+
+**大模型内生能力信任原则 (Model-Native Capability Principle)**:
+避免在服务端硬编码脆弱的方言专有适配，将可通过通用标准只读 SQL 自主探查的运维与方言元数据职责完全归还给大模型的极简设计哲学。
+_避免使用_: 客户端自主性 (Client Autonomy)、免适配设计 (No-adapter Design)
+
+**模式过滤模式 (Schema Filter Pattern)**:
+在表清单探查中支持通配符或前缀匹配过滤，避免大库全量扫描导致 I/O 阻塞与上下文爆炸的按需探查策略。
+_避免使用_: 表名正则匹配 (Table Regex)、模糊搜索 (Fuzzy Search)
+
+**自适应文本截断 (Adaptive Text Truncation)**:
+在安全序列化层对超长纯文本字段提供字符长度探测与安全截断标注，防止单字段冲垮客户端对话上下文的防护机制。
+_避免使用_: 字符串截断器 (String Truncater)、大字段剪裁 (Bigfield Clipper)
+
+
 
 
 
