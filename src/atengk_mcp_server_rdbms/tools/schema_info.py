@@ -5,6 +5,7 @@ mcp-server-rdbms: 数据库模式探查、表清单与全息表结构工具.
 @since 2026-10-04
 """
 
+import fnmatch
 import logging
 from typing import Any
 
@@ -71,6 +72,8 @@ def fetch_tables_summary(
     registry: ConnectionRegistry,
     schema: str | None,
     include_views: bool,
+    include_foreign_keys: bool,
+    pattern: str | None,
     db: str | None,
 ) -> dict[str, Any]:
     """同步获取数据表/视图清单及全库外键拓扑关系（在工作线程池执行）.
@@ -78,6 +81,8 @@ def fetch_tables_summary(
     @param registry: 数据库连接注册表
     @param schema: 目标模式名称（可选）
     @param include_views: 是否包含视图
+    @param include_foreign_keys: 是否包含外键拓扑（默认 False，防 N+1 查询）
+    @param pattern: 表名通配符过滤模式（基于 fnmatch，大小写不敏感）
     @param db: 数据库连接别名（可选）
     @return: 包含 tables 与 foreign_keys 的字典载荷
     """
@@ -114,6 +119,11 @@ def fetch_tables_summary(
         raw_tables = []
     tables = SchemaFilter.filter_tables(raw_tables, dialect=dialect_name)
 
+    # 内存通配符过滤（基于 fnmatch，大小写不敏感）
+    if pattern and pattern.strip():
+        pat = pattern.strip().lower()
+        tables = [t for t in tables if fnmatch.fnmatchcase(t.lower(), pat)]
+
     tables_list: list[TableSummary] = []
     for tbl in tables:
         comment = _get_table_comment(inspector, tbl, schema=target_schema)
@@ -124,21 +134,25 @@ def fetch_tables_summary(
         try:
             raw_views = inspector.get_view_names(schema=target_schema)
             views = SchemaFilter.filter_tables(raw_views, dialect=dialect_name)
+            if pattern and pattern.strip():
+                pat = pattern.strip().lower()
+                views = [v for v in views if fnmatch.fnmatchcase(v.lower(), pat)]
             for view_name in views:
                 view_comment = _get_table_comment(inspector, view_name, schema=target_schema)
                 tables_list.append(TableSummary(name=view_name, type="view", comment=view_comment))
         except (SQLAlchemyError, AttributeError, NotImplementedError) as exc:
             logger.debug("获取视图清单失败: %s", exc)
 
-    # 4. 聚合数据表间外键约束拓扑关系
+    # 4. 按需聚合数据表间外键约束拓扑关系（仅在显式激活时扫描，消除 N+1 查询瓶颈）
     fk_list: list[ForeignKeyTopology] = []
-    for tbl in tables:
-        try:
-            fks = inspector.get_foreign_keys(tbl, schema=target_schema)
-            for fk in fks:
-                fk_list.append(_convert_foreign_key(fk, tbl))
-        except (SQLAlchemyError, AttributeError, NotImplementedError) as exc:
-            logger.debug("获取表 %s 外键拓扑失败: %s", tbl, exc)
+    if include_foreign_keys:
+        for tbl in tables:
+            try:
+                fks = inspector.get_foreign_keys(tbl, schema=target_schema)
+                for fk in fks:
+                    fk_list.append(_convert_foreign_key(fk, tbl))
+            except (SQLAlchemyError, AttributeError, NotImplementedError) as exc:
+                logger.debug("获取表 %s 外键拓扑失败: %s", tbl, exc)
 
     return TableListResult(schema=target_schema, tables=tables_list, foreign_keys=fk_list).to_dict()
 
@@ -270,23 +284,33 @@ def register_schema_tools(server: MCPServer, registry: ConnectionRegistry) -> No
 
     @server.tool(
         name="schema_list_tables",
-        description="获取指定模式下的数据表/视图清单、表注释以及全库外键拓扑关系。",
+        description="获取指定模式下的数据表/视图清单与表注释。支持基于通配符（如 user_*）的 pattern 内存过滤；默认不加载外键以保障大库极速响应，显式指定 include_foreign_keys=True 时聚合全库外键拓扑。",
     )
     async def schema_list_tables(
         schema: str | None = None,
         include_views: bool = False,
+        include_foreign_keys: bool = False,
+        pattern: str | None = None,
         db: str | None = None,
     ) -> dict[str, Any]:
         """获取数据表清单与外键拓扑关系.
 
         @param schema: 目标 Schema 模式名称，缺省时探测默认模式
         @param include_views: 是否包含视图，默认 False
+        @param include_foreign_keys: 是否聚合全库外键拓扑关系，默认 False（防 N+1 瓶颈）
+        @param pattern: 表名通配符过滤模式（例如 order_*、*_log），大小写不敏感
         @param db: 目标数据库连接别名，缺省时使用默认连接
         @return: 包含 tables 与 foreign_keys 的结果字典
         """
         try:
             return await anyio.to_thread.run_sync(
-                fetch_tables_summary, registry, schema, include_views, db
+                fetch_tables_summary,
+                registry,
+                schema,
+                include_views,
+                include_foreign_keys,
+                pattern,
+                db,
             )
         except (DriverMissingError, ConnectionNotFoundError) as exc:
             raise ToolError(str(exc)) from exc

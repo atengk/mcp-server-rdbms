@@ -66,13 +66,65 @@ async def test_schema_list_tables_basic(schema_setup):
     # 默认不包含视图
     assert "v_user_orders" not in table_names
 
-    # 验证外键拓扑关系
+    # 验证外键拓扑关系：默认 include_foreign_keys 为 False，返回空列表
+    assert data["foreign_keys"] == []
+
+
+@pytest.mark.asyncio
+async def test_schema_list_tables_include_foreign_keys(schema_setup):
+    server, _ = schema_setup
+    result = await server.call_tool("schema_list_tables", {"include_foreign_keys": True})
+    data = result.structured_content
+
+    # 显式传入 include_foreign_keys=True 时聚合全库外键
     fks = data["foreign_keys"]
     assert len(fks) >= 1
     fk = next(f for f in fks if f["constrained_table"] == "orders")
     assert fk["constrained_columns"] == ["user_id"]
     assert fk["referred_table"] == "users"
     assert fk["referred_columns"] == ["id"]
+
+
+@pytest.mark.asyncio
+async def test_schema_list_tables_no_fk_queries_by_default(schema_setup):
+    server, _ = schema_setup
+    from sqlalchemy.engine.reflection import Inspector
+
+    with patch.object(Inspector, "get_foreign_keys") as spy_fks:
+        await server.call_tool("schema_list_tables", {})
+        assert not spy_fks.called
+
+
+@pytest.mark.asyncio
+async def test_schema_list_tables_pattern_matching(schema_setup):
+    server, _ = schema_setup
+
+    # 1. 通配符前缀过滤 "user*"
+    res1 = await server.call_tool("schema_list_tables", {"pattern": "user*"})
+    names1 = [t["name"] for t in res1.structured_content["tables"]]
+    assert "users" in names1
+    assert "orders" not in names1
+
+    # 2. 大小写不敏感 "ORDER*"
+    res2 = await server.call_tool("schema_list_tables", {"pattern": "ORDER*"})
+    names2 = [t["name"] for t in res2.structured_content["tables"]]
+    assert "orders" in names2
+    assert "users" not in names2
+
+    # 3. 视图通配过滤 "v_*" (需配合 include_views=True)
+    res3 = await server.call_tool(
+        "schema_list_tables",
+        {"include_views": True, "pattern": "v_*"},
+    )
+    names3 = [t["name"] for t in res3.structured_content["tables"]]
+    assert "v_user_orders" in names3
+    assert "users" not in names3
+    assert "orders" not in names3
+
+    # 4. 无匹配模式返回空列表
+    res4 = await server.call_tool("schema_list_tables", {"pattern": "not_exist_*"})
+    assert res4.structured_content["tables"] == []
+
 
 
 @pytest.mark.asyncio
