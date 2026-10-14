@@ -22,7 +22,9 @@ class ASTGuard:
     @since 2026-10-04
     """
 
-    _EXPLAIN_PREFIX_PATTERN: ClassVar[re.Pattern[str]] = re.compile(r"^\s*explain\s+", re.IGNORECASE)
+    _EXPLAIN_PREFIX_PATTERN: ClassVar[re.Pattern[str]] = re.compile(
+        r"^\s*explain(\s+query\s+plan|\s+plan\s+for)?\s+", re.IGNORECASE
+    )
     _DANGEROUS_EXPLAIN_MODIFIERS: ClassVar[re.Pattern[str]] = re.compile(
         r"\b(analyze|execute)\b", re.IGNORECASE
     )

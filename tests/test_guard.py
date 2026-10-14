@@ -214,6 +214,48 @@ def test_validate_explain_query_blocks_analyze_and_mutation():
         ASTGuard.validate_explain_query("UPDATE users SET name = 'admin'")
 
 
+def test_validate_explain_query_dialects_postgres_mysql_sqlite():
+    """验证 SQLite、PostgreSQL 与 MySQL 多方言下的执行计划安全过滤与 LIMIT 禁注入."""
+    # 1. PostgreSQL 方言：拦截 ANALYZE 与 EXECUTE
+    with pytest.raises(SecurityViolationError) as exc_pg:
+        ASTGuard.validate_explain_query(
+            "EXPLAIN (ANALYZE, BUFFERS) SELECT * FROM users",
+            dialect="postgres",
+        )
+    assert "ANALYZE" in str(exc_pg.value)
+
+    # PostgreSQL 正常 EXPLAIN 放行且不追加 LIMIT
+    pg_safe = ASTGuard.validate_explain_query(
+        "EXPLAIN SELECT id, name FROM users",
+        dialect="postgres",
+    )
+    assert "LIMIT" not in pg_safe.upper()
+    assert "users" in pg_safe
+
+    # 2. MySQL 方言：正常 EXPLAIN 放行且不追加 LIMIT，拦截写操作
+    my_safe = ASTGuard.validate_explain_query(
+        "EXPLAIN SELECT id, name FROM users",
+        dialect="mysql",
+    )
+    assert "LIMIT" not in my_safe.upper()
+    assert "users" in my_safe
+
+    with pytest.raises(SecurityViolationError):
+        ASTGuard.validate_explain_query(
+            "EXPLAIN DELETE FROM users WHERE id = 1",
+            dialect="mysql",
+        )
+
+    # 3. SQLite 方言：正常 EXPLAIN QUERY PLAN 放行且不追加 LIMIT
+    sqlite_safe = ASTGuard.validate_explain_query(
+        "EXPLAIN QUERY PLAN SELECT id FROM users",
+        dialect="sqlite",
+    )
+    assert "LIMIT" not in sqlite_safe.upper()
+    assert "users" in sqlite_safe
+
+
+
 @pytest.mark.parametrize(
     "trivial_sql",
     [

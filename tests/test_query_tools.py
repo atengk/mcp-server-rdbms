@@ -172,3 +172,83 @@ async def test_sql_query_dangerous_function_blocked(query_setup):
         await server.call_tool("sql_query", {"sql": "SELECT sleep(1)"})
     assert "高危" in str(exc_info.value) or "副作用" in str(exc_info.value)
 
+
+@pytest.mark.asyncio
+async def test_sql_query_explain_sqlite_success(query_setup):
+    server, _ = query_setup
+    result = await server.call_tool(
+        "sql_query",
+        {"sql": "SELECT id, username FROM users WHERE id = 1", "explain": True},
+    )
+    data = result.structured_content
+
+    assert data["format"] == "json"
+    assert data["row_count"] > 0
+    assert len(data["columns"]) > 0
+    assert isinstance(data["data"], list)
+    # SQLite EXPLAIN QUERY PLAN 返回的行包含 detail 字段
+    assert any("detail" in row for row in data["data"])
+
+
+@pytest.mark.asyncio
+async def test_sql_query_explain_no_limit_injected(query_setup):
+    server, _ = query_setup
+    with patch("atengk_mcp_server_rdbms.tools.sql_query._execute_explain_sync", wraps=__import__("atengk_mcp_server_rdbms.tools.sql_query", fromlist=["_execute_explain_sync"])._execute_explain_sync) as spy_explain:
+        await server.call_tool(
+            "sql_query",
+            {"sql": "SELECT * FROM users", "explain": True},
+        )
+        assert spy_explain.called
+        # 校验传入底层执行的 SQL 不含 LIMIT
+        passed_sql = spy_explain.call_args[0][1]
+        assert "LIMIT" not in passed_sql.upper()
+
+
+@pytest.mark.asyncio
+async def test_sql_query_explain_markdown_format(query_setup):
+    server, _ = query_setup
+    result = await server.call_tool(
+        "sql_query",
+        {"sql": "SELECT * FROM users", "explain": True, "format": "markdown"},
+    )
+    data = result.structured_content
+
+    assert data["format"] == "markdown"
+    assert isinstance(data["data"], str)
+    assert "|" in data["data"]
+    assert "detail" in data["data"].lower() or "---" in data["data"]
+
+
+@pytest.mark.asyncio
+async def test_sql_query_explain_blocks_analyze(query_setup):
+    server, _ = query_setup
+    with pytest.raises(ToolError) as exc_info:
+        await server.call_tool(
+            "sql_query",
+            {"sql": "EXPLAIN ANALYZE SELECT * FROM users", "explain": True},
+        )
+    assert "ANALYZE" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_sql_query_explain_blocks_execute(query_setup):
+    server, _ = query_setup
+    with pytest.raises(ToolError) as exc_info:
+        await server.call_tool(
+            "sql_query",
+            {"sql": "EXPLAIN EXECUTE SELECT * FROM users", "explain": True},
+        )
+    assert "ANALYZE" in str(exc_info.value) or "EXECUTE" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_sql_query_explain_blocks_mutation(query_setup):
+    server, _ = query_setup
+    with pytest.raises(ToolError) as exc_info:
+        await server.call_tool(
+            "sql_query",
+            {"sql": "DROP TABLE users", "explain": True},
+        )
+    assert "只读" in str(exc_info.value)
+
+
