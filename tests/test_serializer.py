@@ -74,3 +74,50 @@ def test_empty_rows_formats():
     assert SafeSerializer.format_rows([], format_type="json") == []
     assert SafeSerializer.format_rows([], format_type="markdown") == "(0 行数据)"
     assert SafeSerializer.format_rows([], format_type="csv") == ""
+
+
+def test_text_truncation_boundary():
+    # 刚好等于 2048 字符不截断
+    exact_text = "a" * 2048
+    assert SafeSerializer.serialize_value(exact_text) == exact_text
+
+    # 超过 2048 字符自适应截断并追加长度标注
+    long_text = "b" * 3000
+    res = SafeSerializer.serialize_value(long_text)
+    assert len(res) > 2048
+    assert res.startswith("b" * 2048)
+    assert res.endswith("... [已截断，总长度 3000 字符]")
+
+
+def test_text_truncation_in_containers():
+    data = {
+        "short": "normal text",
+        "long": "c" * 2500,
+        "nested": ["item1", "d" * 2100],
+    }
+    res = SafeSerializer.serialize_value(data)
+    assert res["short"] == "normal text"
+    assert res["long"].endswith("... [已截断，总长度 2500 字符]")
+    assert res["nested"][0] == "item1"
+    assert res["nested"][1].endswith("... [已截断，总长度 2100 字符]")
+
+
+def test_text_truncation_across_formats():
+    long_text = "e" * 2500
+    rows = [{"id": 1, "content": long_text}]
+
+    # 1. JSON 格式
+    json_res = SafeSerializer.format_rows(rows, format_type="json")
+    assert isinstance(json_res, list)
+    assert json_res[0]["content"].endswith("... [已截断，总长度 2500 字符]")
+
+    # 2. Markdown 格式
+    md_res = SafeSerializer.format_rows(rows, format_type="markdown")
+    assert isinstance(md_res, str)
+    assert "... [已截断，总长度 2500 字符]" in md_res
+
+    # 3. CSV 格式
+    csv_res = SafeSerializer.format_rows(rows, format_type="csv")
+    assert isinstance(csv_res, str)
+    assert "... [已截断，总长度 2500 字符]" in csv_res
+

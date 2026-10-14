@@ -14,11 +14,13 @@ from typing import Any, Literal
 
 
 class SafeSerializer:
-    """安全序列化器：转换 Decimal/时间/UUID、截断大 BLOB 并格式化多类型结果集.
+    """安全序列化器：转换 Decimal/时间/UUID、截断大 BLOB 与超长文本并格式化多类型结果集.
 
     @author Ateng
     @since 2026-10-04
     """
+
+    MAX_TEXT_LENGTH: int = 2048
 
     @classmethod
     def serialize_value(cls, val: Any) -> Any:
@@ -61,12 +63,21 @@ class SafeSerializer:
         if isinstance(val, (list, tuple, set)):
             return [cls.serialize_value(item) for item in val]
 
-        # 7. 基础原生字面量保持原样
-        if isinstance(val, (int, float, bool, str)):
+        # 7. 字符串长文本自适应截断（超过安全阈值截断并标注）
+        if isinstance(val, str):
+            if len(val) > cls.MAX_TEXT_LENGTH:
+                return f"{val[:cls.MAX_TEXT_LENGTH]}... [已截断，总长度 {len(val)} 字符]"
             return val
 
-        # 8. 其余未知对象兜底转为字符串
-        return str(val)
+        # 8. 基础数值与布尔原生字面量保持原样
+        if isinstance(val, (int, float, bool)):
+            return val
+
+        # 9. 其余未知对象兜底转为字符串并安全截断
+        str_val = str(val)
+        if len(str_val) > cls.MAX_TEXT_LENGTH:
+            return f"{str_val[:cls.MAX_TEXT_LENGTH]}... [已截断，总长度 {len(str_val)} 字符]"
+        return str_val
 
     @classmethod
     def serialize_rows(cls, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
