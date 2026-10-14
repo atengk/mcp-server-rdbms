@@ -170,7 +170,7 @@ jobs:
           fi
 
       - name: 归档不可变制品附件
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: release-dist
           path: dist/*
