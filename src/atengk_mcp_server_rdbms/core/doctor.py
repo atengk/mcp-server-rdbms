@@ -428,6 +428,53 @@ class DoctorDiagnostic:
                     )
                 )
 
+            # 检查 HTTP/SSE 访问令牌门禁安全状态
+            if self.config.auth_token:
+                masked_tok = (
+                    self.config.auth_token[:2] + "***" + self.config.auth_token[-2:]
+                    if len(self.config.auth_token) >= 4
+                    else "***"
+                )
+                items.append(
+                    EnvCheckItem(
+                        name="HTTP/SSE 访问令牌门禁",
+                        status="ok",
+                        message="已启用 Bearer Token 访问令牌安全门禁，未授权请求将被自动拦截。",
+                        masked_value=masked_tok,
+                    )
+                )
+            elif self.config.transport in {"sse", "streamable-http"}:
+                items.append(
+                    EnvCheckItem(
+                        name="HTTP/SSE 访问令牌门禁",
+                        status="warn",
+                        message="当前网络协议处于无凭据直接访问状态。建议配置 MCP_RDBMS_AUTH_TOKEN 或挂载前置反向代理网关实施认证加固。",
+                        masked_value="未启用",
+                    )
+                )
+
+            # 检查 HTTP/SSE 主机白名单状态
+            if self.config.allowed_hosts:
+                items.append(
+                    EnvCheckItem(
+                        name="HTTP/SSE 主机白名单 (Allowed Hosts)",
+                        status="ok",
+                        message=f"已配置允许访问的主机白名单: {list(self.config.allowed_hosts)}",
+                        masked_value=f"{len(self.config.allowed_hosts)} 项",
+                    )
+                )
+
+            # 检查跨域 CORS 来源状态
+            if self.config.cors_origins:
+                items.append(
+                    EnvCheckItem(
+                        name="跨域资源共享来源 (CORS Origins)",
+                        status="ok",
+                        message=f"已配置允许跨域访问的 Origin 来源列表: {list(self.config.cors_origins)}",
+                        masked_value=f"{len(self.config.cors_origins)} 项",
+                    )
+                )
+
         return items
 
     def _probe_connections(self) -> list[ConnectionCheckItem]:

@@ -30,3 +30,7 @@ class ServerRuntimeConfig(NamedTuple):
     audit_backup_count: int = 5
     server_name: str = "mcp-server-rdbms"
     server_instructions: str | None = None
+    auth_token: str | None = None
+    allowed_hosts: tuple[str, ...] = ()
+    allowed_origins: tuple[str, ...] = ()
+    cors_origins: tuple[str, ...] = ()

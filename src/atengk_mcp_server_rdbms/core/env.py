@@ -328,6 +328,7 @@ def resolve_runtime_config(
 
     arg_server_name = getattr(args, "server_name", None) if args else None
     arg_server_instructions = getattr(args, "server_instructions", None) if args else None
+    arg_auth_token = getattr(args, "auth_token", None) if args else None
 
     server_name = (
         arg_server_name
@@ -338,6 +339,31 @@ def resolve_runtime_config(
     server_instructions = (
         arg_server_instructions
         or get_env("MCP_RDBMS_SERVER_INSTRUCTIONS", env=source)
+    )
+
+    auth_token = (
+        arg_auth_token
+        or get_env("MCP_RDBMS_AUTH_TOKEN", env=source)
+    )
+
+    arg_allowed_hosts = getattr(args, "allowed_hosts", None) if args else None
+    arg_allowed_origins = getattr(args, "allowed_origins", None) if args else None
+    arg_cors_origins = getattr(args, "cors_origins", None) if args else None
+
+    allowed_hosts = (
+        parse_comma_list(arg_allowed_hosts)
+        if arg_allowed_hosts
+        else parse_comma_list(get_env("MCP_RDBMS_ALLOWED_HOSTS", env=source))
+    )
+    allowed_origins = (
+        parse_comma_list(arg_allowed_origins)
+        if arg_allowed_origins
+        else parse_comma_list(get_env("MCP_RDBMS_ALLOWED_ORIGINS", env=source))
+    )
+    cors_origins = (
+        parse_comma_list(arg_cors_origins)
+        if arg_cors_origins
+        else parse_comma_list(get_env("MCP_RDBMS_CORS_ORIGINS", env=source))
     )
 
     return ServerRuntimeConfig(
@@ -356,4 +382,21 @@ def resolve_runtime_config(
         audit_backup_count=audit_backup_count,
         server_name=server_name,
         server_instructions=server_instructions,
+        auth_token=auth_token,
+        allowed_hosts=allowed_hosts,
+        allowed_origins=allowed_origins,
+        cors_origins=cors_origins,
     )
+
+
+def parse_comma_list(val: str | None) -> tuple[str, ...]:
+    """将逗号分隔的配置字符串解析为规范化的非空元组.
+
+    @param val: 逗号分隔的原始字符串
+    @return: 去除首尾空格且非空的不可变字符串元组
+    """
+    if not val:
+        return ()
+    items = [item.strip() for item in val.split(",") if item.strip()]
+    return tuple(items)
+

@@ -149,3 +149,57 @@ def test_render_doctor_console():
     assert "MCP Server RDBMS 运行环境与健康体检探针" in output
     assert "关系型数据库驱动就绪矩阵" in output
     assert "数据库连接握手与探活探针" in output
+
+
+def test_doctor_auth_token_probe():
+    """验证在 SSE 模式下未配置令牌产生告警，配置令牌后显示合规."""
+    # 1. SSE 模式未配置令牌 -> 告警
+    cfg_no_token = resolve_runtime_config(
+        args=parse_args(["--transport", "sse", "--db-url", "sqlite:///:memory:"])
+    )
+    diag1 = DoctorDiagnostic(config=cfg_no_token)
+    rep1 = diag1.diagnose()
+    auth_items1 = [e for e in rep1.env_audit if "访问令牌门禁" in e.name]
+    assert len(auth_items1) == 1
+    assert auth_items1[0].status == "warn"
+
+    # 2. SSE 模式配置令牌 -> 合规
+    cfg_with_token = resolve_runtime_config(
+        args=parse_args([
+            "--transport", "sse",
+            "--db-url", "sqlite:///:memory:",
+            "--auth-token", "super-secret-key-999",
+        ])
+    )
+    diag2 = DoctorDiagnostic(config=cfg_with_token)
+    rep2 = diag2.diagnose()
+    auth_items2 = [e for e in rep2.env_audit if "访问令牌门禁" in e.name]
+    assert len(auth_items2) == 1
+    assert auth_items2[0].status == "ok"
+    assert "su***99" == auth_items2[0].masked_value
+
+
+def test_doctor_allowed_hosts_and_cors_probes():
+    """验证 DoctorDiagnostic 正确展示主机白名单与 CORS 来源状态."""
+    cfg = resolve_runtime_config(
+        args=parse_args([
+            "--transport", "sse",
+            "--db-url", "sqlite:///:memory:",
+            "--allowed-hosts", "mcp.domain.com",
+            "--cors-origins", "http://localhost:3000",
+        ])
+    )
+    diag = DoctorDiagnostic(config=cfg)
+    rep = diag.diagnose()
+
+    host_items = [e for e in rep.env_audit if "主机白名单" in e.name]
+    assert len(host_items) == 1
+    assert host_items[0].status == "ok"
+    assert host_items[0].masked_value == "1 项"
+
+    cors_items = [e for e in rep.env_audit if "跨域资源共享来源" in e.name]
+    assert len(cors_items) == 1
+    assert cors_items[0].status == "ok"
+    assert cors_items[0].masked_value == "1 项"
+
+

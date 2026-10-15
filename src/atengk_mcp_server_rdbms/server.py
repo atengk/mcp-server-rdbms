@@ -67,4 +67,25 @@ def create_server(
     # 6. 装配 MCP 只读模式资源暴露器 (rdbms://connections, rdbms://{db}/schema, rdbms://audit/recent)
     register_resources(server, registry, audit=audit)
 
+    # 7. 装配通用健康检查与就绪探活路由 (/health, /ping)
+    register_health_endpoints(server)
+
     return server
+
+
+def register_health_endpoints(server: MCPServer) -> None:
+    """注册通用存活与健康检查探针路由（免认证公开路由，供容器编排与反代探活）.
+
+    @param server: FastMCP 服务实例
+    """
+    from starlette.requests import Request
+    from starlette.responses import JSONResponse
+
+    @server.custom_route("/health", methods=["GET"])
+    async def health_endpoint(request: Request) -> JSONResponse:
+        return JSONResponse({"status": "ok", "service": server.name})
+
+    @server.custom_route("/ping", methods=["GET"])
+    async def ping_endpoint(request: Request) -> JSONResponse:
+        return JSONResponse({"status": "pong"})
+

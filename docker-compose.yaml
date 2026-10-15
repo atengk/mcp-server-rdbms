@@ -1,8 +1,8 @@
 services:
   mcp-rdbms:
-    # 官方预构建多架构镜像（默认 latest，生产环境建议绑定具体版本如 :1.3.0）
+    # 官方预构建多架构镜像（默认 latest，生产环境建议绑定具体版本如 :1.4.0）
     image: ghcr.io/atengk/mcp-server-rdbms:latest
-    # image: ghcr.io/atengk/mcp-server-rdbms:1.3.0
+    # image: ghcr.io/atengk/mcp-server-rdbms:1.4.0
 
     # 若需基于本地源码二次开发构建镜像，可解开以下注释并执行 docker compose build：
     # build:
@@ -10,12 +10,20 @@ services:
     #   dockerfile: Dockerfile
     container_name: mcp-server-rdbms
     restart: unless-stopped
+    # 生产安全推荐：限制为本地回环绑定 (127.0.0.1)，通过前置 Nginx/反向代理对外暴露
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     environment:
       - MCP_RDBMS_TRANSPORT=sse
       - MCP_RDBMS_SERVER_HOST=0.0.0.0
       - MCP_RDBMS_SERVER_PORT=8000
+      # 访问令牌门禁（推荐配置，拦截未授权网络访问）
+      # - MCP_RDBMS_AUTH_TOKEN=YOUR_STRONG_SECRET_TOKEN
+      # 主机 Host 与来源 Origin 安全白名单（反向代理自定义域名或跨主机访问时推荐配置，支持 * 通配）
+      # - MCP_RDBMS_ALLOWED_HOSTS=*
+      # - MCP_RDBMS_ALLOWED_ORIGINS=*
+      # 跨域资源共享 (CORS) 允许来源列表（浏览器 Web 客户端跨域接入时配置）
+      # - MCP_RDBMS_CORS_ORIGINS=http://localhost:3000,https://ai.example.com
       # 模式 1：挂载 connections.yaml 配置文件
       - MCP_RDBMS_CONFIG=/app/connections.yaml
       # 模式 2：或者直接使用独立环境变量（支持密码特殊字符免转义）
@@ -25,6 +33,13 @@ services:
       # - MCP_RDBMS_USER=root
       # - MCP_RDBMS_PASSWORD=Admin@123#2026
       # - MCP_RDBMS_DATABASE=mydb
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
     volumes:
       - ./connections.yaml:/app/connections.yaml:ro
       - ./rdbms_mcp_audit.log:/app/rdbms_mcp_audit.log:rw
+

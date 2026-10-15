@@ -332,13 +332,32 @@ uvx atengk-mcp-server-rdbms --version
 
 ### 场景 4：远程服务调用 (HTTP/SSE 协议接入)
 
-若服务已部署在局域网、云服务器或容器中，客户端可直接通过标准 HTTP SSE 端点接入：
+若服务已部署在局域网、云服务器或容器中，客户端可直接通过标准 HTTP SSE 或 Streamable-HTTP 端点接入。**强烈建议在网络模式下启用令牌门禁或前置反向代理网关**：
 
+#### 方式 A：携带 Bearer Token 访问令牌（推荐）
 ```json
 {
   "mcpServers": {
     "rdbms-remote": {
-      "url": "http://<服务器IP>:8000/sse"
+      "url": "http://<服务器IP>:8000/sse",
+      "headers": {
+        "Authorization": "Bearer YOUR_STRONG_SECRET_TOKEN"
+      }
+    }
+  }
+}
+```
+> 💡 若客户端（如部分浏览器环境）不支持设置自定义请求头，亦可直接在 URL 中追加 Query 鉴权参数：`http://<服务器IP>:8000/sse?token=YOUR_STRONG_SECRET_TOKEN`。
+
+#### 方式 B：通过生产级反向代理（HTTPS 加密 + 域名）
+```json
+{
+  "mcpServers": {
+    "rdbms-secure": {
+      "url": "https://mcp.yourdomain.com/sse",
+      "headers": {
+        "Authorization": "Bearer YOUR_STRONG_SECRET_TOKEN"
+      }
     }
   }
 }
@@ -369,6 +388,10 @@ uvx atengk-mcp-server-rdbms --version
 | **通信传输协议** | `MCP_RDBMS_TRANSPORT` | `stdio`（默认）、`sse`、`streamable-http` |
 | **服务监听地址** | `MCP_RDBMS_SERVER_HOST` | SSE/HTTP 监听地址（默认: `127.0.0.1`） |
 | **服务监听端口** | `MCP_RDBMS_SERVER_PORT` | SSE/HTTP 监听端口（默认: `8000`） |
+| **访问令牌门禁** | `MCP_RDBMS_AUTH_TOKEN` | 远端 HTTP/SSE 模式下的 Bearer 访问令牌安全认证门禁（未配置时保持无认证） |
+| **主机白名单** | `MCP_RDBMS_ALLOWED_HOSTS` | HTTP/SSE 模式下的 Host 主机白名单（反代自定义域名或跨主机时配置，支持 `*` 通配全部） |
+| **来源白名单** | `MCP_RDBMS_ALLOWED_ORIGINS` | HTTP/SSE 模式下的 Origin 来源白名单（反代跨域来源校验，支持 `*` 通配全部） |
+| **CORS 跨域** | `MCP_RDBMS_CORS_ORIGINS` | 跨域资源共享允许来源列表（如 `http://localhost:3000` 或 `*`，配置后自动挂载 CORSMiddleware） |
 | **服务实例名称** | `MCP_RDBMS_SERVER_NAME` | 自定义服务实例名称（多实例挂载时区分业务，默认 `mcp-server-rdbms`） |
 | **服务业务指令** | `MCP_RDBMS_SERVER_INSTRUCTIONS` | 面向大模型注入的专属业务提示词指令 |
 | **审计日志路径** | `MCP_RDBMS_AUDIT_LOG_FILE` | 审计日志落盘路径（默认: `rdbms_mcp_audit.log`） |
@@ -498,7 +521,7 @@ docker compose down
 services:
   mcp-rdbms:
     image: ghcr.io/atengk/mcp-server-rdbms:latest
-    # image: ghcr.io/atengk/mcp-server-rdbms:1.3.0
+    # image: ghcr.io/atengk/mcp-server-rdbms:1.4.0
     # build: .  # 开发者二次构建镜像时解开注释即可
     container_name: mcp-server-rdbms
     restart: unless-stopped
@@ -655,6 +678,7 @@ uv pip install "atengk-mcp-server-rdbms[all]"         # 一键安装所有驱动
                               [--allow-dml] [--allow-ddl]
                               [--transport {stdio,sse,streamable-http}]
                               [--host HOST] [--port PORT]
+                              [--auth-token AUTH_TOKEN]
                               [--audit-log AUDIT_LOG]
                               [--audit-mode {mutation,all,off}]
                               [--audit-max-bytes AUDIT_MAX_BYTES]
@@ -675,6 +699,10 @@ uv pip install "atengk-mcp-server-rdbms[all]"         # 一键安装所有驱动
 | **`--transport`** | `str` | `MCP_RDBMS_TRANSPORT` | `stdio` | 客户端通信协议，支持 `stdio`、`sse`、`streamable-http` |
 | **`--host`** | `str` | `MCP_RDBMS_SERVER_HOST` | `127.0.0.1` | SSE 或 HTTP 服务的绑定监听地址 |
 | **`--port`** | `int` | `MCP_RDBMS_SERVER_PORT` | `8000` | SSE 或 HTTP 服务的监听端口 |
+| **`--auth-token`** | `str` | `MCP_RDBMS_AUTH_TOKEN` | `None` | HTTP/SSE 模式下的 Bearer 访问令牌认证门禁，未授权请求将响应 401 |
+| **`--allowed-hosts`** | `str` | `MCP_RDBMS_ALLOWED_HOSTS` | `None` | HTTP/SSE 允许访问的主机 Host 白名单（逗号分隔或 `*` 通配全部） |
+| **`--allowed-origins`** | `str` | `MCP_RDBMS_ALLOWED_ORIGINS` | `None` | HTTP/SSE 允许访问的来源 Origin 白名单（逗号分隔或 `*` 通配全部） |
+| **`--cors-origins`** | `str` | `MCP_RDBMS_CORS_ORIGINS` | `None` | 跨域资源共享 (CORS) 允许来源列表（逗号分隔或 `*` 通配全部） |
 | **`--audit-log`** | `str` | `MCP_RDBMS_AUDIT_LOG_FILE` | `rdbms_mcp_audit.log` | 审计日志落盘文件路径 |
 | **`--audit-mode`** | `str` | `MCP_RDBMS_AUDIT_MODE` | `mutation` | 审计范围：`mutation`（仅 DML/DDL 变更）、`all`（全量含只读分析）、`off`（完全关闭） |
 | **`--audit-max-bytes`** | `int` | `MCP_RDBMS_AUDIT_MAX_BYTES` | `10485760` (10MB) | 单文件触发日志切片轮转的最大字节数 |
@@ -704,6 +732,65 @@ uv pip install "atengk-mcp-server-rdbms[all]"         # 一键安装所有驱动
      "error": null
    }
    ```
+5. **远端 HTTP/SSE 网络安全规约、边缘加固与反向代理 (ADR-0027 / ADR-0028)**：
+   - ⚠️ **网络直接暴露严正告警**：在 `sse` 或 `streamable-http` 模式下，服务直接开放网络端口，直连核心关系型数据库。**严禁直接将未加密、未鉴权的 HTTP 端口裸露至公网**（防范零认证拖库、明文窃听与 DNS 重绑定攻击）；
+   - **内置令牌门禁 (`MCP_RDBMS_AUTH_TOKEN`)**：启动时配置 `MCP_RDBMS_AUTH_TOKEN=YOUR_TOKEN`，服务将通过时序安全的 `TokenAuthMiddleware` 强制拦截缺失或错误凭据的请求并响应 `401 Unauthorized`；
+   - **主机白名单与 DNS Rebinding 防御适配 (`MCP_RDBMS_ALLOWED_HOSTS`)**：FastMCP 默认启用严格的 DNS 重绑定保护且仅放行 `127.0.0.1`。若前置反向代理使用 `proxy_set_header Host $host;` 传递了自定义域名、局域网 IP 或容器内互联（如 `mcp.company.com`），请配置 `MCP_RDBMS_ALLOWED_HOSTS=*` 或具体域名清单；或者在 Nginx 中将 Host 覆写为本地地址（`proxy_set_header Host 127.0.0.1:8000;`）；
+   - **跨域资源共享 (CORS) 与预检免密穿透 (`MCP_RDBMS_CORS_ORIGINS`)**：当使用基于浏览器的 Web 客户端（如 Web 版 Agent/Chatbox）跨域连接时，服务自动对浏览器的 `OPTIONS` 跨域预检请求免密穿透放行；配置 `MCP_RDBMS_CORS_ORIGINS="http://localhost:3000,https://ai.example.com"` 即可自动挂载 Starlette 原生 `CORSMiddleware`（未授权的 401 响应亦会携带 CORS 头）；
+   - **云原生就绪与健康检查探针 (`/health`, `/ping`)**：服务原生注册免认证的探活路由，已在官方 `docker-compose.yaml` 中配置 `healthcheck:` 节，彻底防止 Kubernetes 或 Docker 因鉴权拦截误杀容器并陷入无限重启；
+   - **全量连接池优雅回收 (Graceful Pool Disposal)**：无论通过用户手动中断（SIGINT）还是容器编排停机（SIGTERM），服务均在顶层结构化保证（`try ... finally`）中 100% 显式关闭并释放数据库连接池，彻底消灭连接悬挂与锁泄漏；
+   - **安全回环绑定**：容器部署时遵循 `docker-compose.yaml` 默认的 `"127.0.0.1:8000:8000"` 本地回环绑定，物理级切断外部网络探测通道；
+   - **生产级反向代理加固 (Nginx / Caddy 最佳实践)**：
+     生产环境强烈建议通过前置成熟网关收敛 HTTPS 证书卸载、外部认证、IP 白名单与速率限制（Rate Limit）：
+
+     **Nginx 反向代理配置参考 (`/etc/nginx/conf.d/mcp_rdbms.conf`)**：
+     ```nginx
+     # 定义每秒 10 次请求的限流桶
+     limit_req_zone $binary_remote_addr zone=mcp_limit:10m rate=10r/s;
+
+     server {
+         listen 443 ssl http2;
+         server_name mcp.yourdomain.com;
+
+         ssl_certificate     /etc/letsencrypt/live/mcp.yourdomain.com/fullchain.pem;
+         ssl_certificate_key /etc/letsencrypt/live/mcp.yourdomain.com/privkey.pem;
+
+         # 1. IP 白名单访问控制（可选，仅允许内网办公机或 AI 聚合网关调用）
+         # allow 192.168.1.0/24;
+         # deny all;
+
+         location / {
+             limit_req zone=mcp_limit burst=20 nodelay;
+
+             # 2. SSE 长连接与流式传输关键优化
+             proxy_pass http://127.0.0.1:8000;
+             proxy_http_version 1.1;
+             proxy_set_header Connection '';
+             proxy_set_header Host $host;
+             proxy_set_header X-Real-IP $remote_addr;
+             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+             proxy_set_header X-Forwarded-Proto $scheme;
+
+             # 禁用响应缓冲以保障 SSE 实时推流
+             proxy_buffering off;
+             proxy_cache off;
+             chunked_transfer_encoding on;
+             proxy_read_timeout 3600s;
+             proxy_send_timeout 3600s;
+         }
+     }
+     ```
+
+     **Caddy 反向代理极简配置 (`Caddyfile`)**：
+     ```caddy
+     mcp.yourdomain.com {
+         # 自动申请与续签 Let's Encrypt TLS 证书
+         reverse_proxy 127.0.0.1:8000 {
+             # 保障 SSE 长连接不被中间缓冲打断
+             flush_interval -1
+         }
+     }
+     ```
 
 ---
 

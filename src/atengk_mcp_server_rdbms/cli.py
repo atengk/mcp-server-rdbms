@@ -10,6 +10,8 @@ import importlib.metadata
 import platform
 import sys
 
+from mcp.server.mcpserver import MCPServer
+
 from atengk_mcp_server_rdbms.core.audit import AuditLogger
 from atengk_mcp_server_rdbms.core.connection import ConnectionRegistry
 from atengk_mcp_server_rdbms.core.env import resolve_runtime_config
@@ -47,6 +49,10 @@ CLI_EPILOG = """
   MCP_RDBMS_TRANSPORT          通信协议 (stdio / sse / streamable-http)
   MCP_RDBMS_SERVER_HOST        HTTP/SSE 监听地址 (默认 127.0.0.1)
   MCP_RDBMS_SERVER_PORT        HTTP/SSE 监听端口 (默认 8000)
+  MCP_RDBMS_AUTH_TOKEN         HTTP/SSE 模式下的 Bearer 访问令牌认证门禁
+  MCP_RDBMS_ALLOWED_HOSTS      HTTP/SSE 模式下的 Host 主机白名单 (逗号分隔或 '*' 通配全部)
+  MCP_RDBMS_ALLOWED_ORIGINS    HTTP/SSE 模式下的 Origin 来源白名单 (逗号分隔或 '*' 通配全部)
+  MCP_RDBMS_CORS_ORIGINS       跨域资源共享 (CORS) 允许来源列表 (逗号分隔或 '*' 通配全部)
   MCP_RDBMS_AUDIT_LOG_FILE     审计日志路径 (默认 rdbms_mcp_audit.log)
   MCP_RDBMS_AUDIT_MODE         审计范围 (mutation / all / off)
   MCP_RDBMS_SERVER_NAME        自定义服务实例显示名称（多服务独立挂载时区分业务）
@@ -169,6 +175,30 @@ def parse_args(args: list[str] | None = None) -> argparse.Namespace:
         help="HTTP/SSE 监听端口（默认: 8000，支持环境变量 MCP_RDBMS_SERVER_PORT）",
     )
     parser.add_argument(
+        "--auth-token",
+        type=str,
+        default=None,
+        help="远端 HTTP/SSE 模式下的访问令牌认证门禁（支持环境变量 MCP_RDBMS_AUTH_TOKEN）",
+    )
+    parser.add_argument(
+        "--allowed-hosts",
+        type=str,
+        default=None,
+        help="HTTP/SSE 允许访问的主机 Host 白名单（逗号分隔或 '*' 通配全部，支持环境变量 MCP_RDBMS_ALLOWED_HOSTS）",
+    )
+    parser.add_argument(
+        "--allowed-origins",
+        type=str,
+        default=None,
+        help="HTTP/SSE 允许访问的来源 Origin 白名单（逗号分隔或 '*' 通配全部，支持环境变量 MCP_RDBMS_ALLOWED_ORIGINS）",
+    )
+    parser.add_argument(
+        "--cors-origins",
+        type=str,
+        default=None,
+        help="跨域资源共享 (CORS) 允许来源列表（逗号分隔或 '*' 通配全部，支持环境变量 MCP_RDBMS_CORS_ORIGINS）",
+    )
+    parser.add_argument(
         "--audit-log",
         type=str,
         default=None,
@@ -244,6 +274,104 @@ def build_registry_from_args(args: argparse.Namespace) -> ConnectionRegistry:
     return build_registry(cfg)
 
 
+def run_http_server(
+    server: MCPServer,
+    transport: str,
+    host: str,
+    port: int,
+    auth_token: str | None = None,
+    allowed_hosts: tuple[str, ...] | list[str] | None = None,
+    allowed_origins: tuple[str, ...] | list[str] | None = None,
+    cors_origins: tuple[str, ...] | list[str] | None = None,
+) -> None:
+    """启动并运行 HTTP 传输层服务（支持可选 Bearer Token 门禁、CORS 与 Uvicorn 调度）.
+
+    @param server: 已装配领域工具的 MCPServer 实例
+    @param transport: 通信协议（sse 或 streamable-http）
+    @param host: 监听主机地址
+    @param port: 监听端口号
+    @param auth_token: 可选访问令牌，设置后强制校验请求凭据
+    @param allowed_hosts: 允许的主机 Host 白名单（支持 '*' 通配）
+    @param allowed_origins: 允许的来源 Origin 白名单（支持 '*' 通配）
+    @param cors_origins: 允许跨域资源共享的 Origin 列表（支持 '*' 通配）
+    """
+    import anyio
+    import uvicorn
+    from mcp.server.transport_security import TransportSecuritySettings
+
+    # 1. 构建底层传输层安全设置（DNS Rebinding 防御配置）
+    transport_security: TransportSecuritySettings | None = None
+    if allowed_hosts or allowed_origins:
+        effective_hosts = list(allowed_hosts or [])
+        effective_origins = list(allowed_origins or [])
+
+        # 若包含全局通配符 '*'，则直接关闭 DNS Rebinding 保护（适用于受信任私网或前置网关场景）
+        if "*" in effective_hosts or "*" in effective_origins:
+            transport_security = TransportSecuritySettings(
+                enable_dns_rebinding_protection=False
+            )
+        else:
+            default_hosts = ["127.0.0.1:*", "localhost:*", "[::1]:*"]
+            default_origins = [
+                "http://127.0.0.1:*",
+                "http://localhost:*",
+                "http://[::1]:*",
+            ]
+            all_hosts = set(default_hosts)
+            all_origins = set(default_origins)
+            for h in effective_hosts:
+                all_hosts.add(h)
+                if not h.endswith(":*"):
+                    all_hosts.add(f"{h}:*")
+            for o in effective_origins:
+                all_origins.add(o)
+                if not o.endswith(":*"):
+                    all_origins.add(f"{o}:*")
+
+            transport_security = TransportSecuritySettings(
+                enable_dns_rebinding_protection=True,
+                allowed_hosts=sorted(all_hosts),
+                allowed_origins=sorted(all_origins),
+            )
+
+    # 2. 构造 Starlette 应用实例
+    if transport == "sse":
+        app = server.sse_app(host=host, transport_security=transport_security)
+    elif transport == "streamable-http":
+        app = server.streamable_http_app(host=host, transport_security=transport_security)
+    else:
+        raise ValueError(f"不支持的 HTTP 传输协议: {transport}")
+
+    # 3. 挂载访问令牌认证中间件（内层）
+    if auth_token:
+        from atengk_mcp_server_rdbms.core.auth import TokenAuthMiddleware
+
+        app.add_middleware(TokenAuthMiddleware, token=auth_token)
+
+    # 4. 挂载跨域 CORS 中间件（外层，确保未授权 401 响应亦携带 CORS 头）
+    if cors_origins:
+        from starlette.middleware.cors import CORSMiddleware
+
+        cors_list = list(cors_origins)
+        allow_all = "*" in cors_list
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=["*"] if allow_all else cors_list,
+            allow_credentials=not allow_all,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
+
+    config = uvicorn.Config(
+        app,
+        host=host,
+        port=port,
+        log_level=server.settings.log_level.lower(),
+    )
+    uv_server = uvicorn.Server(config)
+    anyio.run(uv_server.serve)
+
+
 def main(args: list[str] | None = None) -> None:
     """主程序启动入口.
 
@@ -301,11 +429,20 @@ def main(args: list[str] | None = None) -> None:
     try:
         if cfg.transport == "stdio":
             server.run(transport="stdio")
-        elif cfg.transport == "sse":
-            server.run(transport="sse", host=cfg.host, port=cfg.port)
-        elif cfg.transport == "streamable-http":
-            server.run(transport="streamable-http", host=cfg.host, port=cfg.port)
+        elif cfg.transport in {"sse", "streamable-http"}:
+            run_http_server(
+                server,
+                transport=cfg.transport,
+                host=cfg.host,
+                port=cfg.port,
+                auth_token=cfg.auth_token,
+                allowed_hosts=cfg.allowed_hosts,
+                allowed_origins=cfg.allowed_origins,
+                cors_origins=cfg.cors_origins,
+            )
     except KeyboardInterrupt:
         sys.stderr.write("\n服务已由用户主动终止。\n")
+    finally:
         registry.close_all()
+
 

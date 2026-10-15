@@ -268,3 +268,43 @@ async def test_tools_contain_multi_db_guidance():
     assert "多数据库路由" in tool_map["sql_query"].description
     assert "多数据库路由" in tool_map["sql_dml"].description
     assert "多数据库路由" in tool_map["sql_ddl"].description
+
+
+def test_parse_args_auth_token_flag():
+    """验证 --auth-token 命令行参数正确解析."""
+    args = parse_args(["--auth-token", "test-token-777"])
+    assert args.auth_token == "test-token-777"
+
+
+def test_parse_args_edge_security_flags():
+    """验证 --allowed-hosts, --allowed-origins, --cors-origins 参数正确解析."""
+    args = parse_args([
+        "--allowed-hosts", "host1,host2",
+        "--allowed-origins", "origin1,origin2",
+        "--cors-origins", "http://localhost:3000",
+    ])
+    assert args.allowed_hosts == "host1,host2"
+    assert args.allowed_origins == "origin1,origin2"
+    assert args.cors_origins == "http://localhost:3000"
+
+
+def test_main_finally_closes_registry(monkeypatch):
+    """验证 main() 入口在遭遇异常或退出时通过 finally 块可靠关闭数据库连接."""
+    from unittest.mock import MagicMock
+
+    from atengk_mcp_server_rdbms import cli
+
+    mock_registry = MagicMock()
+    monkeypatch.setattr(cli, "build_registry", lambda cfg: mock_registry)
+    monkeypatch.setattr(cli, "create_server", MagicMock())
+
+    # 模拟在执行时抛出中断异常
+    def mock_run_http(*args, **kwargs):
+        raise KeyboardInterrupt()
+
+    monkeypatch.setattr(cli, "run_http_server", mock_run_http)
+
+    cli.main(["--transport", "sse", "--db-url", "sqlite:///:memory:"])
+    mock_registry.close_all.assert_called_once()
+
+

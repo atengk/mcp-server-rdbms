@@ -219,3 +219,32 @@ _避免使用_: 服务别名 (Server Alias)、自定义描述 (Custom Descriptio
 **多库路由提示词引导 (Multi-DB Routing Guidance)**:
 在全部核心数据操作工具的契约描述中显式注入多数据库识别、可用连接查询与跨库定向路由说明，消除大模型跨库执行幻觉并强化精准参数调度的提示词工程机制。
 _避免使用_: 多库提示 (Multi-db Hint)、参数提示词 (Param Prompt)
+
+**传输层令牌门禁 (Bearer Token Gate)**:
+在远端网络协议（SSE / Streamable-HTTP）通信中，通过常数时间安全比对请求头或查询参数中的访问令牌，阻断未授权网络调用与自动化扫描的内置安全中间件机制。
+_避免使用_: API 密码 (API Password)、简易 Token 校验 (Simple Token Check)
+
+**反向代理网关防御 (Reverse Proxy Gateway Defense)**:
+将 MCP 网络服务部署于前置网关（如 Nginx、Caddy、Envoy）之后，由网关统一收敛 TLS/HTTPS 证书加密、IP 白名单、速率限制与外部认证的纵深防御边界体系。
+_避免使用_: 外部网关 (External Gateway)、代理防护 (Proxy Protection)
+
+**安全回环绑定 (Localhost Loopback Binding)**:
+在容器化或本地网络部署中，强制将服务端口仅绑定至本地回环地址（127.0.0.1）而非全网卡（0.0.0.0），物理级防御非预期的局域网或公网直接暴露的最小暴露面策略。
+_避免使用_: 本地绑定 (Local Bind)、单机监听 (Single Host Listen)
+
+**主机与来源安全白名单 (Allowed Hosts & Origins)**:
+在远端网络协议模式下，显式指定或通配允许访问的 Host 域名与 Origin 来源，以精准适配反向代理与容器互联并防止被 DNS Rebinding 机制误杀的安全白名单机制。
+_避免使用_: 域名白名单 (Domain Whitelist)、Host 过滤 (Host Filter)
+
+**预检免认证穿透 (CORS Preflight Bypass)**:
+在传输层令牌门禁中对浏览器发起的跨域 OPTIONS 预检请求执行免认证放行，确保 Web 版 AI 客户端在跨域接入时能够顺利完成 CORS 握手而不被误判为未授权的协议兼容机制。
+_避免使用_: OPTIONS 放行 (OPTIONS Pass)、预检豁免 (Preflight Exemption)
+
+**健康探针免认证路由 (Public Health Probe)**:
+在 FastMCP 实例上注册并在令牌门禁中公开免密放行的轻量探活端点（/health 与 /ping），供 Docker Compose、Kubernetes 与负载均衡器精准探查服务存活而免受令牌拦截导致重启风暴的云原生就绪机制。
+_避免使用_: 健康检查接口 (Health Endpoint)、探针白名单 (Probe Whitelist)
+
+**优雅连接池回收 (Graceful Pool Disposal)**:
+无论服务通过用户主动中断（SIGINT）、容器编排终止（SIGTERM）还是未捕获异常退出，均在顶层结构化保证（try...finally）中全量关闭并释放连接池句柄以彻底杜绝数据库悬挂连接的生命周期安全保障机制。
+_避免使用_: 退出释放 (Exit Cleanup)、自动断连 (Auto Disconnect)
+
