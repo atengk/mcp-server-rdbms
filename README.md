@@ -98,9 +98,9 @@ flowchart TD
 | 领域前缀 | 工具名称 | 参数契约 | 功能描述与安全约束 |
 | :--- | :--- | :--- | :--- |
 | **`db_`** | `db_info` | `(db: str = None)` | 一站式探查数据库内核版本、当前 Schema/用户、只读保护及全部已配置连接别名列表（密码强制 `***` 掩码脱敏）。多库环境下可供大模型快速发现可用数据库 |
-| **`schema_`** | `schema_list_tables` | `(schema=None, pattern=None, include_views=False, include_foreign_keys=False, db=None)` | 获取业务数据表与视图清单、表注释并支持模式过滤与可选外键依赖拓扑分析。支持多数据库路由，自动过滤底层系统保留模式 |
+| **`schema_`** | `schema_list_tables` | `(schema=None, include_views=False, include_foreign_keys=False, pattern=None, db=None)` | 获取业务数据表与视图清单、表注释并支持模式过滤与可选外键依赖拓扑分析。支持多数据库路由，自动过滤底层系统保留模式 |
 | | `schema_describe_table` | `(table_name: str, schema=None, db=None)` | 一站式全息探查数据表列明细（类型、可空性、默认值）、主键约束、外键关联与全部索引明细。支持多数据库路由 |
-| **`sql_`** | `sql_query` | `(sql: str, limit: int = 100, format="json", explain: bool = False, db=None)` | 安全只读数据采样与业务分析，支持复杂 CTE `WITH` 语法与多库路由。支持 `json` / `markdown` / `csv` 格式、长文本自动截断与自愈型重定向指引；`explain=True` 时内生获取执行计划 |
+| **`sql_`** | `sql_query` | `(sql: str, explain: bool = False, format="json", limit: int = 100, timeout: float = 30.0, db=None)` | 安全只读数据采样与业务分析，支持复杂 CTE `WITH` 语法与多库路由。支持 `json` / `markdown` / `csv` 格式、长文本自动截断、慢查询熔断防护（`timeout` 默认 30 秒，支持 0.001~120 秒）与自愈型重定向指引；`explain=True` 时内生获取执行计划 |
 | | `sql_dml` | `(sql: str \| list[str], db=None)` | 原子事务数据增删改（支持单条、批量与 MERGE，支持多库路由）。**单步失败全量自动回滚**，受 `--allow-dml` 门禁管控，**强制拦截无 WHERE 条件与恒真操作** |
 | | `sql_ddl` | `(sql: str, confirm: bool = False, db=None)` | 结构定义变更（建表、删表、改表，支持多库路由）。受 `--allow-ddl` 权限管控并要求 `confirm=True` 二次确认 |
 
@@ -166,7 +166,7 @@ uvx atengk-mcp-server-rdbms --version
 ```text
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │ MCP Server RDBMS 运行环境与健康体检探针 (Doctor Diagnostics)                │
-│ 服务版本: 1.2.2 | Python: 3.12.14 (CPython) | SQLAlchemy: 2.1.3 | SQLGlot:  │
+│ 服务版本: 1.3.0 | Python: 3.12.14 (CPython) | SQLAlchemy: 2.1.3 | SQLGlot:  │
 │ 30.21.0                                                                     │
 └─────────────────────────────────────────────────────────────────────────────┘
                           1. 关系型数据库驱动就绪矩阵                          
@@ -354,6 +354,7 @@ uvx atengk-mcp-server-rdbms --version
 | :--- | :--- | :--- |
 | **完整连接** | `MCP_RDBMS_DB_URL` | 完整 RFC 1738 连接串（如 `sqlite:///:memory:`） |
 | **零配置多库** | `MCP_RDBMS_DB_<ALIAS>` | 动态多库注入（如 `MCP_RDBMS_DB_DEV=...`、`MCP_RDBMS_DB_PROD=...`，免物理文件） |
+| | `MCP_RDBMS_DBS` | 逗号分隔聚合声明多数据库连接（如 `MCP_RDBMS_DBS="crm=url1,erp=url2"`，动态多库辅助方式） |
 | **默认数据库** | `MCP_RDBMS_DEFAULT_DB` | 多库环境下显式指定默认库别名（如 `dev`） |
 | **多库配置文件** | `MCP_RDBMS_CONFIG` | 多数据源 YAML 配置文件绝对路径 |
 | **数据库方言** | `MCP_RDBMS_DIALECT` | 数据库类型（`mysql`, `postgresql`, `oracle`, `mssql`, `sqlite` 等） |
@@ -397,7 +398,7 @@ uvx atengk-mcp-server-rdbms --version
    - 系统支持多库路由。若用户提问涉及指定库（如“在 CRM 库查…”），请在调用工具时显式传入 `db="crm"`；缺省时将自动路由至默认数据库。
 2. 【安全只读探索与小样本采样】：
    - 探查业务宽表或未知数据时，请显式使用 `sql_query(sql=..., limit=3~5)` 进行微采样，确认实际列名与数据形态后再编写复杂统计分析；
-   - 严禁盲目执行全量扫描；未显式指定 limit 时系统底层将安全截断至 100 行。
+   - 严禁盲目执行全量扫描；未显式指定 limit 时系统底层将安全截断至 100 行；单次查询内置 30 秒超时熔断保护（支持传入 timeout 参数，最高 120 秒）。
 3. 【慢查询与执行计划诊断】：
    - 当用户要求“分析性能/优化慢查询/诊断索引”时，请调用 `sql_query(sql=..., explain=True)`；
    - 根据返回的执行计划（扫描类型、过滤条件、索引使用）为用户输出通俗、专业的性能诊断与建索引建议。
@@ -497,7 +498,7 @@ docker compose down
 services:
   mcp-rdbms:
     image: ghcr.io/atengk/mcp-server-rdbms:latest
-    # image: ghcr.io/atengk/mcp-server-rdbms:1.1.4
+    # image: ghcr.io/atengk/mcp-server-rdbms:1.3.0
     # build: .  # 开发者二次构建镜像时解开注释即可
     container_name: mcp-server-rdbms
     restart: unless-stopped

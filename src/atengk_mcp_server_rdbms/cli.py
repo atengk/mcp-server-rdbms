@@ -40,6 +40,7 @@ CLI_EPILOG = """
 专属环境变量速查表 (Dedicated Environment Variables):
   MCP_RDBMS_DB_URL             默认单数据库连接串
   MCP_RDBMS_DB_<ALIAS>         声明多数据库别名连接（如 MCP_RDBMS_DB_ANALYTICS）
+  MCP_RDBMS_DBS                逗号分隔聚合声明多数据库连接（如 crm=url1,erp=url2）
   MCP_RDBMS_DEFAULT_DB         多库模式下的默认数据库别名
   MCP_RDBMS_ALLOW_DML          开启数据修改 (DML) 权限 (true/false)
   MCP_RDBMS_ALLOW_DDL          开启结构变更 (DDL) 权限 (true/false)
@@ -52,12 +53,11 @@ CLI_EPILOG = """
   MCP_RDBMS_SERVER_INSTRUCTIONS 面向大模型的专属业务提示词指令
 
 可选驱动一键安装指引 (Dialect Drivers):
-  PostgreSQL:   uv pip install "atengk-mcp-server-rdbms[postgres]"
-  MySQL:        uv pip install "atengk-mcp-server-rdbms[mysql]"
+  内置驱动支持: SQLite, PostgreSQL (psycopg3), MySQL (pymysql)
   Oracle:       uv pip install "atengk-mcp-server-rdbms[oracle]"
   SQL Server:   uv pip install "atengk-mcp-server-rdbms[mssql]"
   ClickHouse:   uv pip install "atengk-mcp-server-rdbms[clickhouse]"
-  全量依赖:     uv pip install "atengk-mcp-server-rdbms[all]"
+  全量可选依赖: uv pip install "atengk-mcp-server-rdbms[all]"
 """
 
 
