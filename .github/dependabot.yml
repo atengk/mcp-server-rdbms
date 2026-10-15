@@ -22,6 +22,9 @@ updates:
     ignore:
       - dependency-name: "actions/upload-artifact"
         update-types: ["version-update:semver-major"]
+      - dependency-name: "actions/download-artifact"
+        update-types: ["version-update:semver-major"]
+
     groups:
       actions:
         patterns:
