@@ -276,6 +276,16 @@ def test_parse_args_auth_token_flag():
     assert args.auth_token == "test-token-777"
 
 
+def test_parse_args_strict_functions_flag():
+    """验证 --strict-functions 命令行参数正确解析."""
+    args_default = parse_args([])
+    assert args_default.strict_functions is False
+
+    args_enabled = parse_args(["--strict-functions"])
+    assert args_enabled.strict_functions is True
+
+
+
 def test_parse_args_edge_security_flags():
     """验证 --allowed-hosts, --allowed-origins, --cors-origins 参数正确解析."""
     args = parse_args([

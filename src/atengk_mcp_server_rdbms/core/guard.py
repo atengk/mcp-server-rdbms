@@ -64,20 +64,97 @@ class ASTGuard:
         "MCP 工具为无状态调用，请使用基于版本号的乐观并发控制（Optimistic Locking）。"
     )
 
-    # 严禁在只读查询中调用的高危系统函数与具有副作用函数
+    # 严禁在只读查询中调用的高危系统函数与具有副作用函数（覆盖跨 9 大方言的敏感特征）
     _DANGEROUS_FUNCTIONS: ClassVar[frozenset[str]] = frozenset({
-        # 延时与拒绝服务
+        # 1. 延时与拒绝服务
         "pg_sleep",
         "sleep",
         "waitfor",
-        # 序列与状态递增
+        # 2. 序列与状态递增
         "nextval",
         "setval",
         "lastval",
-        # 进程与连接中断运维
+        # 3. 进程与连接中断运维与归档
         "pg_terminate_backend",
         "pg_cancel_backend",
         "pg_reload_conf",
+        "pg_rotate_logfile",
+        "pg_create_restore_point",
+        "pg_switch_wal",
+        # 4. 文件与目录 I/O (CWE-200)
+        "pg_read_file",
+        "pg_read_binary_file",
+        "pg_ls_dir",
+        "pg_ls_waldir",
+        "pg_ls_logdir",
+        "pg_stat_file",
+        "pg_write_file",
+        "load_file",
+        "file",
+        # 5. 大对象持久写入与状态操作 (CWE-863)
+        "lo_import",
+        "lo_export",
+        "lo_put",
+        "lo_unlink",
+        "lo_create",
+        # 6. 动态扩展与库加载
+        "load_extension",
+        # 7. 远程执行与跨库链接
+        "dblink",
+        "dblink_exec",
+        "dblink_connect",
+        "dblink_open",
+        "dblink_close",
+        "dblink_disconnect",
+        "dblink_send_query",
+        "openquery",
+        "openrowset",
+        "opendatasource",
+        "remote",
+        "remotesecure",
+        "url",
+        "s3",
+        "hdfs",
+        # 8. 进程派生与操作系统交互
+        "xp_cmdshell",
+        "xp_dirtree",
+        "xp_fileexist",
+        "sp_makewebtask",
+        "sys_eval",
+        "sys_exec",
+        "do_system",
+    })
+
+    # 严禁调用的高危存储过程与函数包前缀（Oracle / 达梦）
+    _DANGEROUS_PACKAGES: ClassVar[frozenset[str]] = frozenset({
+        "utl_file",
+        "dbms_lob",
+        "utl_http",
+        "dbms_pipe",
+        "dbms_scheduler",
+        "ctxsys.driload",
+    })
+
+    # 纯只读计算函数白名单（供 --strict-functions 严格模式启用）
+    _ALLOWED_PURE_FUNCTIONS: ClassVar[frozenset[str]] = frozenset({
+        # 数学计算
+        "abs", "ceil", "ceiling", "floor", "round", "trunc", "power", "sqrt",
+        "mod", "exp", "ln", "log", "sign", "sin", "cos", "tan", "asin", "acos", "atan", "atan2",
+        # 字符串处理
+        "length", "len", "lower", "upper", "substr", "substring", "trim", "ltrim", "rtrim",
+        "replace", "concat", "concat_ws", "instr", "position", "locate", "left", "right",
+        "lpad", "rpad", "char", "chr", "ascii", "reverse", "format",
+        # 日期与时间
+        "now", "current_timestamp", "current_date", "current_time", "date", "time",
+        "year", "month", "day", "hour", "minute", "second", "date_add", "date_sub",
+        "datediff", "date_trunc", "extract", "strftime", "to_char", "to_date", "to_timestamp", "age",
+        # 聚合与分析窗口
+        "count", "sum", "avg", "min", "max", "group_concat", "string_agg", "array_agg",
+        "row_number", "rank", "dense_rank", "ntile", "lead", "lag", "first_value", "last_value",
+        # 转换与条件
+        "coalesce", "nullif", "greatest", "least", "cast", "try_cast", "convert", "ifnull", "nvl",
+        # JSON 提取
+        "json_extract", "json_array", "json_object", "json_valid", "json_quote", "json_unquote",
     })
 
     # 允许作为 DML 数据操作的顶层 AST 节点类型（包含增删改及复合写 MERGE）
@@ -167,15 +244,40 @@ class ASTGuard:
 
 
     @classmethod
+    def _resolve_call_names(cls, node: exp.Expression) -> tuple[str, set[str]]:
+        """从函数调用节点中解析标准函数名与全量包限定名集合."""
+        if isinstance(node, exp.Anonymous):
+            raw_name = node.name.lower()
+        else:
+            raw_name = (node.key or node.name).lower()
+
+        names = {raw_name}
+        curr = node
+        while isinstance(curr.parent, exp.Dot):
+            prefix = curr.parent.this.sql().lower()
+            if prefix:
+                names.add(prefix)
+                names.add(f"{prefix}.{raw_name}")
+                # 支持多层 Schema 包名解析（例如 sys.utl_file -> utl_file）
+                for part in prefix.split("."):
+                    if part:
+                        names.add(part)
+                        names.add(f"{part}.{raw_name}")
+            curr = curr.parent
+        return raw_name, names
+
+    @classmethod
     def _parse_and_validate_ast(
         cls,
         sql: str,
         dialect: str | None = None,
+        strict_functions: bool = False,
     ) -> exp.Expression:
         """内部方法：执行语法树解析、多语句拦截与纯只读性深度校验.
 
         @param sql: 原始 SQL 文本
         @param dialect: 数据库方言标识（可选）
+        @param strict_functions: 是否启用严格纯函数白名单模式（默认 False）
         @return: 校验合规的 AST 根表达式节点
         @throws SecurityViolationError: 违规时抛出
         """
@@ -203,14 +305,38 @@ class ASTGuard:
             if isinstance(node, exp.Lock):
                 raise SecurityViolationError(cls._LOCK_DISALLOWED_MESSAGE)
 
-            # 2. 深度检测高危系统函数与副作用函数
-            if (
-                isinstance(node, (exp.Anonymous, exp.Func))
-                and node.name.lower() in cls._DANGEROUS_FUNCTIONS
-            ):
-                raise SecurityViolationError(
-                    f"只读查询中禁止调用具有副作用或高危系统函数（检测到高危函数: {node.name}）。"
+            # 2. 深度检测高危系统函数与副作用函数（支持 package.func 复合调用解析）
+            if isinstance(node, (exp.Anonymous, exp.Func)):
+                raw_name, names = cls._resolve_call_names(node)
+
+                matched = names.intersection(cls._DANGEROUS_FUNCTIONS) or names.intersection(
+                    cls._DANGEROUS_PACKAGES
                 )
+                if matched:
+                    target = next(iter(matched))
+                    raise SecurityViolationError(
+                        f"只读查询中禁止调用具有副作用或高危系统函数（检测到高危函数或包调用: {target}）。"
+                        "💡 自愈指引：sql_query 仅支持安全只读数据探查，严禁在查询中调用涉及文件系统访问、大对象写操作、跨库执行或系统运维的高危函数。请在查询中剔除该调用，或仅查询常规业务数据表。"
+                    )
+
+                if strict_functions and raw_name not in cls._ALLOWED_PURE_FUNCTIONS:
+                    raise SecurityViolationError(
+                        f"严格函数模式已开启：禁止调用未在白名单中的函数（检测到函数: {raw_name}）。"
+                        "💡 自愈指引：当前服务运行在 --strict-functions 严格安全模式下，仅允许使用内置的纯标量、数学、字符串与聚合函数。"
+                    )
+
+            # 2.1 检测列式引擎表函数 (Table Functions, 如 file('/etc/passwd') / url(...))
+            if isinstance(node, exp.Table):
+                table_name = node.name.lower()
+                if table_name in cls._DANGEROUS_FUNCTIONS:
+                    alias = node.args.get("alias")
+                    if isinstance(node.this, (exp.Anonymous, exp.Func)) or (
+                        alias and getattr(alias, "columns", None)
+                    ):
+                        raise SecurityViolationError(
+                            f"只读查询中禁止调用具有副作用或高危系统函数（检测到高危函数或包调用: {table_name}）。"
+                            "💡 自愈指引：sql_query 仅支持安全只读查询，严禁通过表函数直接读取宿主机文件或外部网络资源。请改用已注册的物理业务表进行查询。"
+                        )
 
             # 3. 深度检测禁止的写入与 DDL 节点
             if isinstance(node, cls._FORBIDDEN_MUTATION_NODES):
@@ -253,15 +379,19 @@ class ASTGuard:
         cls,
         sql: str,
         dialect: str | None = None,
+        strict_functions: bool = False,
     ) -> str:
         """纯只读性验证（不追加 LIMIT，供 EXPLAIN 执行计划分析使用）.
 
         @param sql: 待校验的原始 SQL 文本
         @param dialect: 数据库方言标识（可选）
+        @param strict_functions: 是否启用严格纯函数白名单模式（默认 False）
         @return: 经校验安全的原始 SQL 文本
         @throws SecurityViolationError: 包含写入操作、多语句拼接或语法错误时抛出
         """
-        expr = cls._parse_and_validate_ast(sql, dialect=dialect)
+        expr = cls._parse_and_validate_ast(
+            sql, dialect=dialect, strict_functions=strict_functions
+        )
         norm_dialect = cls._normalize_dialect(dialect)
         return expr.sql(dialect=norm_dialect)
 
@@ -270,6 +400,7 @@ class ASTGuard:
         cls,
         sql: str,
         dialect: str | None = None,
+        strict_functions: bool = False,
     ) -> str:
         """执行计划语句安全校验：剥离前置 EXPLAIN 修饰并强制内层只读性检验.
 
@@ -277,6 +408,7 @@ class ASTGuard:
 
         @param sql: 待校验的原始 SQL 文本（允许带或不带 EXPLAIN 前缀）
         @param dialect: 数据库方言标识（可选）
+        @param strict_functions: 是否启用严格纯函数白名单模式（默认 False）
         @return: 剥离修饰符后经 AST 只读校验的安全 SQL 文本
         @throws SecurityViolationError: 包含 ANALYZE 修饰或底层非只读操作时抛出
         """
@@ -296,7 +428,9 @@ class ASTGuard:
             raise SecurityViolationError("EXPLAIN 语句缺少待分析的底层查询内容。")
 
         # 对内层真实查询执行严格 AST 只读性验证
-        return cls.validate_read_only(inner_sql, dialect=dialect)
+        return cls.validate_read_only(
+            inner_sql, dialect=dialect, strict_functions=strict_functions
+        )
 
     @classmethod
     def validate_and_rewrite_query(
@@ -304,16 +438,20 @@ class ASTGuard:
         sql: str,
         limit: int = 100,
         dialect: str | None = None,
+        strict_functions: bool = False,
     ) -> str:
         """校验 SQL 查询的只读安全性，并在缺省时注入 LIMIT 截断限制.
 
         @param sql: 待校验的原始 SQL 文本
         @param limit: 默认追加的安全截断行数（默认 100）
         @param dialect: 数据库方言标识（可选）
+        @param strict_functions: 是否启用严格纯函数白名单模式（默认 False）
         @return: 经 AST 重写且注入 LIMIT 的安全 SQL 语句
         @throws SecurityViolationError: 包含写入操作、多语句拼接或语法错误时抛出
         """
-        expr = cls._parse_and_validate_ast(sql, dialect=dialect)
+        expr = cls._parse_and_validate_ast(
+            sql, dialect=dialect, strict_functions=strict_functions
+        )
 
         if expr.args.get("limit") is None:
             expr = expr.limit(limit)

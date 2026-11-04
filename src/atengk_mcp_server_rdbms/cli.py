@@ -46,6 +46,7 @@ CLI_EPILOG = """
   MCP_RDBMS_DEFAULT_DB         多库模式下的默认数据库别名
   MCP_RDBMS_ALLOW_DML          开启数据修改 (DML) 权限 (true/false)
   MCP_RDBMS_ALLOW_DDL          开启结构变更 (DDL) 权限 (true/false)
+  MCP_RDBMS_STRICT_FUNCTIONS   开启纯函数白名单严格模式 (true/false)
   MCP_RDBMS_TRANSPORT          通信协议 (stdio / sse / streamable-http)
   MCP_RDBMS_SERVER_HOST        HTTP/SSE 监听地址 (默认 127.0.0.1)
   MCP_RDBMS_SERVER_PORT        HTTP/SSE 监听端口 (默认 8000)
@@ -154,6 +155,12 @@ def parse_args(args: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         default=False,
         help="显式允许执行结构定义 DDL 操作（默认禁用）",
+    )
+    parser.add_argument(
+        "--strict-functions",
+        action="store_true",
+        default=False,
+        help="开启严格纯函数白名单模式，仅允许无副作用的纯计算函数（支持环境变量 MCP_RDBMS_STRICT_FUNCTIONS）",
     )
     parser.add_argument(
         "--transport",
@@ -425,6 +432,7 @@ def main(args: list[str] | None = None) -> None:
         name=cfg.server_name,
         instructions=cfg.server_instructions,
         slow_query_threshold_ms=cfg.slow_query_threshold_ms,
+        strict_functions=cfg.strict_functions,
     )
 
     try:

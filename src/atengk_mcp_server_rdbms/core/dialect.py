@@ -5,12 +5,91 @@ mcp-server-rdbms: 方言识别与缺失驱动智能拦截注册表.
 @since 2026-10-04
 """
 
+import logging
 from typing import ClassVar
 
+from sqlalchemy import Connection, text
 from sqlalchemy.engine import make_url
-from sqlalchemy.exc import ArgumentError
+from sqlalchemy.exc import ArgumentError, SQLAlchemyError
 
+from atengk_mcp_server_rdbms.core.audit import AuditLogger, audit_logger
 from atengk_mcp_server_rdbms.core.exceptions import DriverMissingError
+
+logger = logging.getLogger(__name__)
+
+
+class DialectReadOnlyAdapter:
+    """跨方言只读会话适配器：在底层数据库连接执行只读约束并在不支持时优雅降级.
+
+    @author Ateng
+    @since 2026-11-04
+    """
+
+    _READONLY_COMMANDS: ClassVar[dict[str, str]] = {
+        "sqlite": "PRAGMA query_only = ON",
+        "postgresql": "SET TRANSACTION READ ONLY",
+        "postgres": "SET TRANSACTION READ ONLY",
+        "kingbase": "SET TRANSACTION READ ONLY",
+        "kingbase8": "SET TRANSACTION READ ONLY",
+        "mysql": "SET SESSION TRANSACTION READ ONLY",
+        "mariadb": "SET SESSION TRANSACTION READ ONLY",
+        "tidb": "SET SESSION TRANSACTION READ ONLY",
+        "oracle": "SET TRANSACTION READ ONLY",
+        "dm": "SET TRANSACTION READ ONLY",
+        "clickhouse": "SET readonly = 1",
+    }
+
+    @classmethod
+    def get_readonly_sql(cls, dialect: str) -> str | None:
+        """根据方言名称获取原生只读会话 SQL 指令.
+
+        @param dialect: 数据库方言标识（如 postgresql, mysql, sqlite 等）
+        @return: 对应的原生只读会话指令，若无直接映射则返回 None
+        """
+        base_dialect = dialect.lower().split("+")[0]
+        return cls._READONLY_COMMANDS.get(base_dialect)
+
+    @classmethod
+    def apply_readonly(
+        cls,
+        conn: Connection,
+        dialect: str,
+        audit: AuditLogger | None = None,
+    ) -> bool:
+        """在活跃数据库连接上应用只读会话声明，异常时优雅降级并记录审计流水.
+
+        @param conn: 活跃 SQLAlchemy 数据库连接
+        @param dialect: 数据库方言标识
+        @param audit: 独立审计记录器实例（可选，缺省时使用全局单例）
+        @return: 是否成功应用底层只读会话约束
+        """
+        sql = cls.get_readonly_sql(dialect)
+        if not sql:
+            # 未知方言尝试标准通用指令
+            sql = "SET TRANSACTION READ ONLY"
+
+        try:
+            conn.execute(text(sql))
+            return True
+        except SQLAlchemyError as exc:
+            logger.warning(
+                "数据库方言 '%s' 执行只读会话声明 ('%s') 失败，已优雅降级并依赖 AST 语法守卫防御: %s",
+                dialect,
+                sql,
+                exc,
+            )
+            active_audit = audit or audit_logger
+            try:
+                active_audit.record(
+                    operation="readonly_session_fallback",
+                    db=dialect,
+                    statements=[sql],
+                    status="FAILED",
+                    error=f"只读会话声明失败降级: {exc}",
+                )
+            except (OSError, RuntimeError, ValueError) as audit_exc:
+                logger.warning("记录只读降级审计日志时发生异常: %s", audit_exc)
+            return False
 
 
 class DialectRegistry:

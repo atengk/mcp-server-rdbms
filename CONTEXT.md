@@ -264,4 +264,12 @@ _避免使用_: 库名返回 (DB Name Return)、连接别名回传 (Alias Echo)
 度量并回显序列化结果集的近似字节大小，在单次返回字符体积超出安全警戒线（如 64KB）时主动建议按需投影字段以杜绝 SELECT * 造成上下文爆炸的防护机制。
 _避免使用_: 字节统计 (Byte Counter)、大小检查 (Size Checker)
 
+**副作用函数防御矩阵 (Side-Effecting Function Matrix)**:
+涵盖跨主流关系型数据库方言的文件 I/O、隐式大对象写入、进程派生、表函数数据源与远程执行的高危函数与包特征集合。
+_避免使用_: 函数黑名单 (Function Blacklist)、敏感函数列表 (Sensitive Functions)
+
+**跨方言只读会话适配器 (Dialect Read-Only Session Adapter)**:
+在底层连接与事务执行生命周期内，依据具体数据库方言下发原生只读约束指令并支持优雅容错降级的多态会话策略器。
+_避免使用_: 只读设置器 (ReadOnly Setter)、连接修饰器 (Connection Modifier)
+
 

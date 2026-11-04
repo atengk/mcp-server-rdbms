@@ -17,7 +17,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from atengk_mcp_server_rdbms.core.audit import AuditLogger, audit_logger
 from atengk_mcp_server_rdbms.core.connection import ConnectionRegistry
-from atengk_mcp_server_rdbms.core.dialect import DialectRegistry
+from atengk_mcp_server_rdbms.core.dialect import DialectReadOnlyAdapter, DialectRegistry
 from atengk_mcp_server_rdbms.core.env import get_slow_query_threshold_ms
 from atengk_mcp_server_rdbms.core.exceptions import (
     ConnectionNotFoundError,
@@ -27,6 +27,24 @@ from atengk_mcp_server_rdbms.core.exceptions import (
 from atengk_mcp_server_rdbms.core.guard import ASTGuard
 from atengk_mcp_server_rdbms.core.serializer import SafeSerializer
 from atengk_mcp_server_rdbms.models.query import QueryResult
+
+
+def _execute_readonly_sql_sync(
+    engine: Engine,
+    safe_sql: str,
+) -> tuple[list[str], list[dict[str, Any]]]:
+    """在工作线程池中同步应用只读会话并执行 SQL 语句.
+
+    @param engine: 目标 SQLAlchemy 引擎
+    @param safe_sql: 经 AST 校验的安全 SQL
+    @return: (列名列表, 行字典列表)
+    """
+    with engine.connect() as conn:
+        DialectReadOnlyAdapter.apply_readonly(conn, engine.dialect.name)
+        result = conn.execute(text(safe_sql))
+        cols = list(result.keys()) if result.returns_rows else []
+        rows = [dict(row._mapping) for row in result.fetchall()] if result.returns_rows else []
+        return cols, rows
 
 
 def _execute_query_sync(
@@ -39,11 +57,7 @@ def _execute_query_sync(
     @param safe_sql: 经 AST 语法校验重写后的安全 SQL
     @return: (列名列表, 行字典列表)
     """
-    with engine.connect() as conn:
-        result = conn.execute(text(safe_sql))
-        cols = list(result.keys()) if result.returns_rows else []
-        rows = [dict(row._mapping) for row in result.fetchall()] if result.returns_rows else []
-        return cols, rows
+    return _execute_readonly_sql_sync(engine, safe_sql)
 
 
 def _execute_explain_sync(
@@ -58,12 +72,7 @@ def _execute_explain_sync(
     """
     prefix = DialectRegistry.get_explain_prefix(engine.dialect.name)
     explain_sql = f"{prefix} {safe_sql}"
-
-    with engine.connect() as conn:
-        result = conn.execute(text(explain_sql))
-        cols = list(result.keys()) if result.returns_rows else []
-        rows = [dict(row._mapping) for row in result.fetchall()] if result.returns_rows else []
-        return cols, rows
+    return _execute_readonly_sql_sync(engine, explain_sql)
 
 
 def register_query_tools(
@@ -71,6 +80,7 @@ def register_query_tools(
     registry: ConnectionRegistry,
     audit: AuditLogger | None = None,
     slow_query_threshold_ms: float | None = None,
+    strict_functions: bool = False,
 ) -> None:
     """向 FastMCP 服务注册 sql_query 与 sql_explain 工具.
 
@@ -78,6 +88,7 @@ def register_query_tools(
     @param registry: 数据库连接注册表
     @param audit: 独立审计流水记录器
     @param slow_query_threshold_ms: 慢查询判定基准阈值（毫秒），缺省时由环境变量推导
+    @param strict_functions: 是否启用严格纯函数白名单模式（默认 False）
     """
     active_audit = audit or audit_logger
 
@@ -116,7 +127,9 @@ def register_query_tools(
             # 3. 根据 explain 模式选择 AST 安全校验与执行通道
             if explain:
                 # 执行计划模式：专用校验通道，剥离危险修饰符且绝对不追加外层 LIMIT
-                safe_sql = ASTGuard.validate_explain_query(sql, dialect=engine.dialect.name)
+                safe_sql = ASTGuard.validate_explain_query(
+                    sql, dialect=engine.dialect.name, strict_functions=strict_functions
+                )
                 try:
                     with anyio.fail_after(timeout_seconds):
                         cols, rows = await anyio.to_thread.run_sync(
@@ -132,7 +145,10 @@ def register_query_tools(
             else:
                 # 普通只读模式：AST 安全守卫校验与 LIMIT 截断注入
                 safe_sql = ASTGuard.validate_and_rewrite_query(
-                    sql, limit=limit, dialect=engine.dialect.name
+                    sql,
+                    limit=limit,
+                    dialect=engine.dialect.name,
+                    strict_functions=strict_functions,
                 )
                 try:
                     with anyio.fail_after(timeout_seconds):

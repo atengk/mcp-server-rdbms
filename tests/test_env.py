@@ -331,3 +331,21 @@ def test_get_slow_query_threshold_ms():
     assert cfg.slow_query_threshold_ms == 2500.0
 
 
+def test_resolve_runtime_config_strict_functions():
+    """测试通过环境变量与命令行参数配置 strict_functions."""
+    # 默认值
+    cfg_default = resolve_runtime_config(args=None, env={})
+    assert cfg_default.strict_functions is False
+
+    # 环境变量为 true
+    cfg_env = resolve_runtime_config(args=None, env={"MCP_RDBMS_STRICT_FUNCTIONS": "true"})
+    assert cfg_env.strict_functions is True
+
+    # 命令行显式指定
+    import argparse
+    args = argparse.Namespace(strict_functions=True)
+    cfg_args = resolve_runtime_config(args=args, env={})
+    assert cfg_args.strict_functions is True
+
+
+

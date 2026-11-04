@@ -31,6 +31,7 @@ def create_server(
     name: str = "mcp-server-rdbms",
     instructions: str | None = None,
     slow_query_threshold_ms: float | None = None,
+    strict_functions: bool = False,
 ) -> MCPServer:
     """创建并装配 FastMCP 服务实例.
 
@@ -41,6 +42,7 @@ def create_server(
     @param name: 服务名称（支持通过 --server-name 或 MCP_RDBMS_SERVER_NAME 定制）
     @param instructions: 面向大模型的系统指令（支持通过 --server-instructions 或 MCP_RDBMS_SERVER_INSTRUCTIONS 定制）
     @param slow_query_threshold_ms: 慢操作判定基准阈值（毫秒）
+    @param strict_functions: 是否启用严格纯函数白名单模式（默认 False）
     @return: 已装配领域工具的 MCPServer 实例
     """
     if registry is None:
@@ -59,7 +61,11 @@ def create_server(
 
     # 3. 装配 sql_ 命名空间只读查询与分析工具 (sql_query，含 explain 模式)
     register_query_tools(
-        server, registry, audit=audit, slow_query_threshold_ms=slow_query_threshold_ms
+        server,
+        registry,
+        audit=audit,
+        slow_query_threshold_ms=slow_query_threshold_ms,
+        strict_functions=strict_functions,
     )
 
     # 4. 装配 sql_ 命名空间 DML 变更工具（受 allow_dml 门禁控制）(sql_dml)

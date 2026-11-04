@@ -14,6 +14,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 from sqlalchemy import text
 
 from atengk_mcp_server_rdbms.core.connection import ConnectionRegistry
+from atengk_mcp_server_rdbms.server import create_server
 from atengk_mcp_server_rdbms.tools.sql_query import register_query_tools
 
 
@@ -390,6 +391,49 @@ async def test_sql_query_custom_db_routing_echo(query_setup):
     )
     data = result.structured_content
     assert data["db"] == "analytics"
+
+
+@pytest.mark.asyncio
+async def test_sql_query_blocks_side_effecting_functions_end_to_end(query_setup):
+    """测试 sql_query 顶层工具接口成功拦截副作用函数并返回 ToolError."""
+    server, _ = query_setup
+
+    with pytest.raises(ToolError) as exc_pg:
+        await server.call_tool(
+            "sql_query",
+            {"sql": "SELECT pg_read_file('/etc/passwd')"},
+        )
+    assert "高危函数" in str(exc_pg.value) or "副作用" in str(exc_pg.value)
+
+    with pytest.raises(ToolError) as exc_lo:
+        await server.call_tool(
+            "sql_query",
+            {"sql": "SELECT lo_import('/etc/hostname')"},
+        )
+    assert "高危函数" in str(exc_lo.value) or "副作用" in str(exc_lo.value)
+
+
+@pytest.mark.asyncio
+async def test_sql_query_strict_functions_end_to_end(query_setup):
+    """测试 create_server(strict_functions=True) 下的严格白名单模式."""
+    _, registry = query_setup
+    strict_server = create_server(registry, strict_functions=True)
+
+    # 白名单函数正常放行
+    res = await strict_server.call_tool(
+        "sql_query",
+        {"sql": "SELECT abs(score), lower(username) FROM users"},
+    )
+    assert res.structured_content["row_count"] == 2
+
+    # 未注册自定义函数拦截
+    with pytest.raises(ToolError) as exc_info:
+        await strict_server.call_tool(
+            "sql_query",
+            {"sql": "SELECT custom_eval(id) FROM users"},
+        )
+    assert "严格函数模式" in str(exc_info.value)
+
 
 
 

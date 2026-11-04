@@ -266,6 +266,7 @@ def resolve_runtime_config(
     arg_db_url = getattr(args, "db_url", None) if args else None
     arg_allow_dml = bool(getattr(args, "allow_dml", False)) if args else False
     arg_allow_ddl = bool(getattr(args, "allow_ddl", False)) if args else False
+    arg_strict_functions = bool(getattr(args, "strict_functions", False)) if args else False
     arg_transport = getattr(args, "transport", None) if args else None
     arg_host = getattr(args, "host", None) if args else None
     arg_port = getattr(args, "port", None) if args else None
@@ -279,6 +280,9 @@ def resolve_runtime_config(
     )
     allow_ddl = arg_allow_ddl or parse_bool_env(
         get_env("MCP_RDBMS_ALLOW_DDL", env=source)
+    )
+    strict_functions = arg_strict_functions or parse_bool_env(
+        get_env("MCP_RDBMS_STRICT_FUNCTIONS", env=source)
     )
 
     transport = (
@@ -408,6 +412,7 @@ def resolve_runtime_config(
         allowed_origins=allowed_origins,
         cors_origins=cors_origins,
         slow_query_threshold_ms=slow_query_threshold_ms,
+        strict_functions=strict_functions,
     )
 
 
