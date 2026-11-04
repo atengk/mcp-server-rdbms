@@ -30,6 +30,7 @@ def create_server(
     audit: AuditLogger | None = None,
     name: str = "mcp-server-rdbms",
     instructions: str | None = None,
+    slow_query_threshold_ms: float | None = None,
 ) -> MCPServer:
     """创建并装配 FastMCP 服务实例.
 
@@ -39,6 +40,7 @@ def create_server(
     @param audit: 独立审计记录器实例
     @param name: 服务名称（支持通过 --server-name 或 MCP_RDBMS_SERVER_NAME 定制）
     @param instructions: 面向大模型的系统指令（支持通过 --server-instructions 或 MCP_RDBMS_SERVER_INSTRUCTIONS 定制）
+    @param slow_query_threshold_ms: 慢操作判定基准阈值（毫秒）
     @return: 已装配领域工具的 MCPServer 实例
     """
     if registry is None:
@@ -56,13 +58,27 @@ def create_server(
     register_schema_tools(server, registry)
 
     # 3. 装配 sql_ 命名空间只读查询与分析工具 (sql_query，含 explain 模式)
-    register_query_tools(server, registry, audit=audit)
+    register_query_tools(
+        server, registry, audit=audit, slow_query_threshold_ms=slow_query_threshold_ms
+    )
 
     # 4. 装配 sql_ 命名空间 DML 变更工具（受 allow_dml 门禁控制）(sql_dml)
-    register_dml_tools(server, registry, allow_dml=allow_dml, audit=audit)
+    register_dml_tools(
+        server,
+        registry,
+        allow_dml=allow_dml,
+        audit=audit,
+        slow_query_threshold_ms=slow_query_threshold_ms,
+    )
 
     # 5. 装配 sql_ 命名空间 DDL 结构变更工具（受 allow_ddl 门禁控制）(sql_ddl)
-    register_ddl_tools(server, registry, allow_ddl=allow_ddl, audit=audit)
+    register_ddl_tools(
+        server,
+        registry,
+        allow_ddl=allow_ddl,
+        audit=audit,
+        slow_query_threshold_ms=slow_query_threshold_ms,
+    )
 
     # 6. 装配 MCP 只读模式资源暴露器 (rdbms://connections, rdbms://{db}/schema, rdbms://audit/recent)
     register_resources(server, registry, audit=audit)

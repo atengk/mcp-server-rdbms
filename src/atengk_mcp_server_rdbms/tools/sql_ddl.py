@@ -16,6 +16,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from atengk_mcp_server_rdbms.core.audit import AuditLogger, audit_logger
 from atengk_mcp_server_rdbms.core.connection import ConnectionRegistry
+from atengk_mcp_server_rdbms.core.env import get_slow_query_threshold_ms
 from atengk_mcp_server_rdbms.core.exceptions import (
     ConnectionNotFoundError,
     DriverMissingError,
@@ -42,6 +43,7 @@ def register_ddl_tools(
     registry: ConnectionRegistry,
     allow_ddl: bool = False,
     audit: AuditLogger | None = None,
+    slow_query_threshold_ms: float | None = None,
 ) -> None:
     """向 FastMCP 服务注册 sql_ddl 工具.
 
@@ -49,6 +51,7 @@ def register_ddl_tools(
     @param registry: 数据库连接注册表
     @param allow_ddl: 是否允许执行 DDL 操作（默认 False）
     @param audit: 独立审计流水记录器
+    @param slow_query_threshold_ms: 慢操作判定基准阈值（毫秒），缺省时由环境变量推导
     """
     active_audit = audit or audit_logger
 
@@ -66,11 +69,11 @@ def register_ddl_tools(
         @param sql: 单条 DDL 语句（如 CREATE TABLE, ALTER TABLE, DROP TABLE）
         @param confirm: 破坏性操作显式二次确认（必须为 True 才能执行）
         @param db: 目标数据库连接别名，缺省时使用默认连接
-        @return: 包含 success、statement、duration_ms、message 的结果字典
+        @return: 包含 success、statement、duration_ms、db、warning、message 的结果字典
         @throws ToolError: 只读保护拦截、未二次确认、安全校验失败或执行报错时抛出
         """
         start_time = time.perf_counter()
-        target_db = db or registry.default_alias
+        target_db = db or registry.default_alias or "default"
 
         # 1. 默认权限门禁检查（遵循 ADR-0003 与安全不变量）
         if not allow_ddl:
@@ -135,9 +138,22 @@ def register_ddl_tools(
             # 5. 线程池异步卸载执行 DDL 语句
             await anyio.to_thread.run_sync(_execute_ddl_sync, engine, safe_sql)
 
-            duration_ms = (time.perf_counter() - start_time) * 1000.0
+            duration_ms = round((time.perf_counter() - start_time) * 1000.0, 2)
 
-            # 6. 成功审计日志落盘（异步卸载）
+            # 6. 慢操作自愈预警分析
+            warnings: list[str] = []
+            slow_threshold_ms = (
+                slow_query_threshold_ms
+                if slow_query_threshold_ms is not None
+                else get_slow_query_threshold_ms()
+            )
+            if duration_ms >= slow_threshold_ms:
+                warnings.append(
+                    f"当前结构变更耗时较长 ({duration_ms} ms)，请留意潜在的长事务锁表风险。"
+                )
+            warning_msg = "\n".join(warnings) if warnings else None
+
+            # 7. 成功审计日志落盘（异步卸载）
             success_event = AuditEvent(
                 operation="sql_ddl",
                 db=target_db,
@@ -151,7 +167,9 @@ def register_ddl_tools(
             return DdlResult(
                 success=True,
                 statement=safe_sql,
-                duration_ms=round(duration_ms, 2),
+                duration_ms=duration_ms,
+                db=target_db,
+                warning=warning_msg,
                 message="DDL 结构定义变更执行成功。",
             ).to_dict()
 

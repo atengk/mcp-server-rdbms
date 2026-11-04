@@ -5,6 +5,7 @@ mcp-server-rdbms: 只读 SQL 查询执行、多格式结果集与慢查询熔断
 @since 2026-10-04
 """
 
+import json
 import time
 from typing import Any, Literal
 
@@ -17,6 +18,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from atengk_mcp_server_rdbms.core.audit import AuditLogger, audit_logger
 from atengk_mcp_server_rdbms.core.connection import ConnectionRegistry
 from atengk_mcp_server_rdbms.core.dialect import DialectRegistry
+from atengk_mcp_server_rdbms.core.env import get_slow_query_threshold_ms
 from atengk_mcp_server_rdbms.core.exceptions import (
     ConnectionNotFoundError,
     DriverMissingError,
@@ -68,12 +70,14 @@ def register_query_tools(
     server: MCPServer,
     registry: ConnectionRegistry,
     audit: AuditLogger | None = None,
+    slow_query_threshold_ms: float | None = None,
 ) -> None:
     """向 FastMCP 服务注册 sql_query 与 sql_explain 工具.
 
     @param server: FastMCP 服务实例
     @param registry: 数据库连接注册表
     @param audit: 独立审计流水记录器
+    @param slow_query_threshold_ms: 慢查询判定基准阈值（毫秒），缺省时由环境变量推导
     """
     active_audit = audit or audit_logger
 
@@ -97,7 +101,7 @@ def register_query_tools(
         @param limit: 缺省 LIMIT 时的安全截断行数，默认 100（仅在 explain=False 时生效）
         @param timeout: 查询超时阈值（秒），默认 30 秒，最大 120 秒
         @param db: 目标数据库连接别名，缺省时使用默认连接
-        @return: 包含 row_count、format、data、columns、truncated 的结果字典
+        @return: 包含 row_count、format、data、columns、truncated、duration_ms、db、data_bytes、warning 的结果字典
         @throws ToolError: 安全违规、超时熔断或执行异常时抛出
         """
         # 1. 超时时限阈值收敛（1 ~ 120 秒）
@@ -148,6 +152,43 @@ def register_query_tools(
             is_truncated = (not explain) and (len(rows) >= limit)
             duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
 
+            # 5. 序列化载荷字节大小统计
+            if isinstance(formatted_data, str):
+                data_bytes = len(formatted_data.encode("utf-8"))
+            else:
+                data_bytes = len(json.dumps(formatted_data, ensure_ascii=False).encode("utf-8"))
+
+            # 6. 多维智能体自愈建议分析
+            warnings: list[str] = []
+
+            # 慢查询自愈预警（动态收敛：min(配置阈值, timeout * 1000 * 0.5)）
+            base_threshold_ms = (
+                slow_query_threshold_ms
+                if slow_query_threshold_ms is not None
+                else get_slow_query_threshold_ms()
+            )
+            effective_threshold_ms = min(base_threshold_ms, timeout_seconds * 1000.0 * 0.5)
+            if not explain and duration_ms >= effective_threshold_ms:
+                warnings.append(
+                    f"当前查询耗时较长 ({duration_ms} ms)，建议传入 explain=True 获取执行计划分析慢查询原因，或补充更精确的 WHERE 索引过滤条件。"
+                )
+
+            # 载荷体积超限预警（64KB 警戒线）
+            payload_size_warning_bytes = 65536
+            if data_bytes >= payload_size_warning_bytes:
+                kb_size = round(data_bytes / 1024, 1)
+                warnings.append(
+                    f"返回数据体积较大 ({kb_size} KB)，建议在 SELECT 中仅投影必要字段，避免 SELECT * 以节省上下文开销。"
+                )
+
+            # 执行计划启发式诊断（全表扫描探测）
+            if explain and ASTGuard.detect_full_table_scan(rows):
+                warnings.append(
+                    "执行计划检测到疑似全表扫描 (Full Table Scan)，请检查关联列与过滤列的索引覆盖情况。"
+                )
+
+            warning_msg = "\n".join(warnings) if warnings else None
+
             await active_audit.record_async(
                 operation="sql_query",
                 db=target_db,
@@ -163,6 +204,10 @@ def register_query_tools(
                 data=formatted_data,
                 columns=cols,
                 truncated=is_truncated,
+                duration_ms=duration_ms,
+                db=target_db,
+                data_bytes=data_bytes,
+                warning=warning_msg,
             ).to_dict()
 
         except (SecurityViolationError, DriverMissingError, ConnectionNotFoundError) as exc:

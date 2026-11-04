@@ -38,6 +38,25 @@ DEFAULT_DIALECT_PORTS: dict[str, int] = {
 }
 
 TRUE_BOOLEAN_STRINGS: frozenset[str] = frozenset({"1", "true", "yes", "on", "t"})
+DEFAULT_SLOW_QUERY_THRESHOLD_MS: float = 1000.0
+
+
+def get_slow_query_threshold_ms(env: Mapping[str, str] | None = None) -> float:
+    """获取慢操作自愈判定阈值（毫秒）.
+
+    从 MCP_RDBMS_SLOW_QUERY_THRESHOLD_MS 读取，缺省或格式非法时回退到 1000.0ms.
+
+    @param env: 环境变量映射源，缺省时使用 os.environ
+    @return: 慢操作阈值毫秒数
+    """
+    raw = get_env("MCP_RDBMS_SLOW_QUERY_THRESHOLD_MS", env=env)
+    if raw is None:
+        return DEFAULT_SLOW_QUERY_THRESHOLD_MS
+    try:
+        val = float(raw)
+        return max(0.0, val)
+    except (ValueError, TypeError):
+        return DEFAULT_SLOW_QUERY_THRESHOLD_MS
 
 
 def load_dotenv_if_exists(dotenv_path: str = ".env") -> dict[str, str]:
@@ -366,6 +385,8 @@ def resolve_runtime_config(
         else parse_comma_list(get_env("MCP_RDBMS_CORS_ORIGINS", env=source))
     )
 
+    slow_query_threshold_ms = get_slow_query_threshold_ms(env=source)
+
     return ServerRuntimeConfig(
         config_file=config_file,
         db_url=db_url,
@@ -386,6 +407,7 @@ def resolve_runtime_config(
         allowed_hosts=allowed_hosts,
         allowed_origins=allowed_origins,
         cors_origins=cors_origins,
+        slow_query_threshold_ms=slow_query_threshold_ms,
     )
 
 

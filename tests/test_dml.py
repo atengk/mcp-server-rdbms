@@ -200,3 +200,62 @@ async def test_sql_dml_compound_valid_where_allowed(dml_env):
         p1 = conn.execute(text("SELECT price FROM products WHERE id = 1")).scalar()
         assert p1 == 9.9
 
+
+@pytest.mark.asyncio
+async def test_sql_dml_metrics_db_and_warning(dml_env):
+    """测试 sql_dml 正确返回 duration_ms、db 与 warning 契约."""
+    make_server, _, _ = dml_env
+    server = make_server(allow_dml=True)
+
+    res = await server.call_tool(
+        "sql_dml",
+        {"sql": "INSERT INTO products (id, name, price) VALUES (3, 'cherry', 8.0)"},
+    )
+    data = res.structured_content
+    assert data["success"] is True
+    assert isinstance(data["duration_ms"], float)
+    assert data["duration_ms"] == round(data["duration_ms"], 2)
+    assert data["db"] == "default"
+    assert data["warning"] is None
+
+
+@pytest.mark.asyncio
+async def test_sql_dml_slow_operation_warning(dml_env):
+    """测试 sql_dml 耗时超阈值时给出自愈预警."""
+    make_server, _, _ = dml_env
+    server = make_server(allow_dml=True)
+
+    with patch("atengk_mcp_server_rdbms.tools.sql_dml.get_slow_query_threshold_ms", return_value=0.0):
+        res = await server.call_tool(
+            "sql_dml",
+            {"sql": "UPDATE products SET price = 10.0 WHERE id = 1"},
+        )
+    data = res.structured_content
+    assert data["warning"] is not None
+    assert "当前变更耗时较长" in data["warning"]
+
+
+@pytest.mark.asyncio
+async def test_sql_dml_large_affected_rows_warning(dml_env):
+    """测试 sql_dml 影响行数大于 1000 时提示分批提交."""
+    make_server, registry, _ = dml_env
+    server = make_server(allow_dml=True)
+
+    # 批量插入 1005 条数据
+    engine = registry.get_engine("default")
+    with engine.begin() as conn:
+        conn.execute(
+            text("INSERT INTO products (id, name, price) VALUES (:id, :name, :price)"),
+            [{"id": i, "name": f"item_{i}", "price": 1.0} for i in range(10, 1015)],
+        )
+
+    res = await server.call_tool(
+        "sql_dml",
+        {"sql": "UPDATE products SET price = 2.0 WHERE id >= 10"},
+    )
+    data = res.structured_content
+    assert data["rows_affected"] > 1000
+    assert data["warning"] is not None
+    assert "当前变更影响行数较大" in data["warning"]
+
+

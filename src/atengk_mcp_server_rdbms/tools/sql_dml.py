@@ -16,6 +16,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from atengk_mcp_server_rdbms.core.audit import AuditLogger, audit_logger
 from atengk_mcp_server_rdbms.core.connection import ConnectionRegistry
+from atengk_mcp_server_rdbms.core.env import get_slow_query_threshold_ms
 from atengk_mcp_server_rdbms.core.exceptions import (
     ConnectionNotFoundError,
     DriverMissingError,
@@ -47,6 +48,7 @@ def register_dml_tools(
     registry: ConnectionRegistry,
     allow_dml: bool = False,
     audit: AuditLogger | None = None,
+    slow_query_threshold_ms: float | None = None,
 ) -> None:
     """向 FastMCP 服务注册 sql_dml 工具.
 
@@ -54,6 +56,7 @@ def register_dml_tools(
     @param registry: 数据库连接注册表
     @param allow_dml: 是否允许执行 DML 操作（默认 False）
     @param audit: 独立审计流水记录器
+    @param slow_query_threshold_ms: 慢操作判定基准阈值（毫秒），缺省时由环境变量推导
     """
     active_audit = audit or audit_logger
 
@@ -69,12 +72,12 @@ def register_dml_tools(
 
         @param sql: 单条 SQL 或批量 SQL 语句列表
         @param db: 目标数据库连接别名，缺省时使用默认连接
-        @return: 包含 success、statements_executed、rows_affected 的结果字典
+        @return: 包含 success、statements_executed、rows_affected、duration_ms、db、warning、message 的结果字典
         @throws ToolError: 只读保护拦截、安全校验失败或执行回滚时抛出
         """
         start_time = time.perf_counter()
         raw_stmts = [sql] if isinstance(sql, str) else sql
-        target_db = db or registry.default_alias
+        target_db = db or registry.default_alias or "default"
 
         # 1. 默认只读模式保护门禁检查（遵循 ADR-0003 与安全不变量）
         if not allow_dml:
@@ -121,9 +124,26 @@ def register_dml_tools(
             # 4. 线程池异步卸载执行原子事务（单步失败全量自动 ROLLBACK）
             rows_affected = await anyio.to_thread.run_sync(_execute_dml_sync, engine, safe_stmts)
 
-            duration_ms = (time.perf_counter() - start_time) * 1000.0
+            duration_ms = round((time.perf_counter() - start_time) * 1000.0, 2)
 
-            # 5. 成功审计日志落盘（异步卸载）
+            # 5. 慢变更与受影响行数自愈分析
+            warnings: list[str] = []
+            slow_threshold_ms = (
+                slow_query_threshold_ms
+                if slow_query_threshold_ms is not None
+                else get_slow_query_threshold_ms()
+            )
+            if duration_ms >= slow_threshold_ms:
+                warnings.append(
+                    f"当前变更耗时较长 ({duration_ms} ms)，建议检查 WHERE 索引命中情况。"
+                )
+            if rows_affected > 1000:
+                warnings.append(
+                    f"当前变更影响行数较大 ({rows_affected} 行)，建议评估分批次提交以降低锁持有时间。"
+                )
+            warning_msg = "\n".join(warnings) if warnings else None
+
+            # 6. 成功审计日志落盘（异步卸载）
             success_event = AuditEvent(
                 operation="sql_dml",
                 db=target_db,
@@ -138,7 +158,9 @@ def register_dml_tools(
                 success=True,
                 statements_executed=len(safe_stmts),
                 rows_affected=rows_affected,
-                duration_ms=round(duration_ms, 2),
+                duration_ms=duration_ms,
+                db=target_db,
+                warning=warning_msg,
                 message=f"原子事务执行成功，共执行 {len(safe_stmts)} 条语句，累计影响 {rows_affected} 行。",
             ).to_dict()
 

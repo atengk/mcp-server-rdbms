@@ -248,3 +248,20 @@ _避免使用_: 健康检查接口 (Health Endpoint)、探针白名单 (Probe Wh
 无论服务通过用户主动中断（SIGINT）、容器编排终止（SIGTERM）还是未捕获异常退出，均在顶层结构化保证（try...finally）中全量关闭并释放连接池句柄以彻底杜绝数据库悬挂连接的生命周期安全保障机制。
 _避免使用_: 退出释放 (Exit Cleanup)、自动断连 (Auto Disconnect)
 
+**执行耗时度量 (Execution Latency Metrics)**:
+记录从工具分发入口、AST 安全语法树校验、线程池异步卸载、数据库网络 I/O 执行至结果集安全序列化渲染的端到端全链路操作时间，并统一以两位小数浮点数呈现的度量契约。
+_避免使用_: 执行耗时 (Exec Time)、数据库时间 (DB Latency)、计时器 (Timer)
+
+**慢查询守卫 (Slow Query Guard)**:
+基于专属环境变量（MCP_RDBMS_SLOW_QUERY_THRESHOLD_MS）并结合超时参数动态收敛阈值，在 SQL 执行耗时过长时主动在返回载荷中注入 EXPLAIN 引导与索引自愈建议的主动防御机制。
+_避免使用_: 慢查拦截器 (Slow Interceptor)、超时报警 (Timeout Alert)
+
+**路由回显 (Route Echo)**:
+在多数据库实例配置体系下，将当前操作实际命中并执行的目标连接别名回显至结果集载荷以防范大模型多库幻觉的契约反馈机制。
+_避免使用_: 库名返回 (DB Name Return)、连接别名回传 (Alias Echo)
+
+**体积感知 (Payload Size Awareness)**:
+度量并回显序列化结果集的近似字节大小，在单次返回字符体积超出安全警戒线（如 64KB）时主动建议按需投影字段以杜绝 SELECT * 造成上下文爆炸的防护机制。
+_避免使用_: 字节统计 (Byte Counter)、大小检查 (Size Checker)
+
+

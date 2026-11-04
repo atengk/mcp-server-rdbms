@@ -22,6 +22,10 @@ class QueryResult:
     data: list[dict[str, Any]] | str
     columns: list[str] = field(default_factory=list)
     truncated: bool = False
+    duration_ms: float = 0.0
+    db: str = ""
+    data_bytes: int = 0
+    warning: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """转换为标准字典载荷."""

@@ -20,6 +20,8 @@ class DdlResult(BaseModel):
     success: bool = Field(description="DDL 语句是否执行成功")
     statement: str = Field(description="实际执行的规范化 DDL 语句")
     duration_ms: float = Field(description="操作执行耗时（毫秒）")
+    db: str = Field(default="", description="实际执行的目标数据库连接别名")
+    warning: str | None = Field(default=None, description="面向智能体的自愈指引与诊断建议")
     message: str = Field(description="操作结果可读描述")
 
     def to_dict(self) -> dict[str, Any]:

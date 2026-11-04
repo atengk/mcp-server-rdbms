@@ -34,3 +34,4 @@ class ServerRuntimeConfig(NamedTuple):
     allowed_hosts: tuple[str, ...] = ()
     allowed_origins: tuple[str, ...] = ()
     cors_origins: tuple[str, ...] = ()
+    slow_query_threshold_ms: float = 1000.0

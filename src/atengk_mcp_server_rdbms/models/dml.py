@@ -21,6 +21,8 @@ class DmlResult:
     statements_executed: int
     rows_affected: int
     duration_ms: float
+    db: str = ""
+    warning: str | None = None
     message: str = "执行成功"
 
     def to_dict(self) -> dict[str, Any]:

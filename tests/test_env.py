@@ -310,3 +310,24 @@ def test_resolve_runtime_config_server_metadata():
     assert cfg.server_name == "my-custom-mcp"
     assert cfg.server_instructions == "自定义业务提示指令"
 
+
+def test_get_slow_query_threshold_ms():
+    """测试慢查询阈值环境变量解析与容错机制."""
+    from atengk_mcp_server_rdbms.core.env import get_slow_query_threshold_ms
+
+    # 1. 缺省回退
+    assert get_slow_query_threshold_ms({}) == 1000.0
+
+    # 2. 正常合法数值
+    assert get_slow_query_threshold_ms({"MCP_RDBMS_SLOW_QUERY_THRESHOLD_MS": "500.5"}) == 500.5
+    assert get_slow_query_threshold_ms({"MCP_RDBMS_SLOW_QUERY_THRESHOLD_MS": "2000"}) == 2000.0
+
+    # 3. 非法值与异常格式容错回退
+    assert get_slow_query_threshold_ms({"MCP_RDBMS_SLOW_QUERY_THRESHOLD_MS": "invalid"}) == 1000.0
+    assert get_slow_query_threshold_ms({"MCP_RDBMS_SLOW_QUERY_THRESHOLD_MS": ""}) == 1000.0
+
+    # 4. resolve_runtime_config 集成
+    cfg = resolve_runtime_config(args=None, env={"MCP_RDBMS_SLOW_QUERY_THRESHOLD_MS": "2500"})
+    assert cfg.slow_query_threshold_ms == 2500.0
+
+

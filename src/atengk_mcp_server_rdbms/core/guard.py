@@ -6,7 +6,7 @@ mcp-server-rdbms: 基于 sqlglot 的 AST 语法树安全分析与 LIMIT 注入�
 """
 
 import re
-from typing import ClassVar
+from typing import Any, ClassVar
 
 import sqlglot
 from sqlglot import exp
@@ -458,4 +458,25 @@ class ASTGuard:
                 raise SecurityViolationError(cls._LOCK_DISALLOWED_MESSAGE)
 
         return expr.sql(dialect=norm_dialect)
+
+    @classmethod
+    def detect_full_table_scan(cls, rows: list[dict[str, Any]]) -> bool:
+        """启发式探测执行计划输出中是否存在全表扫描特征.
+
+        @param rows: 执行计划行字典列表
+        @return: True 若检测到疑似全表扫描，否则 False
+        """
+        scan_keywords = ("SCAN TABLE", "SEQ SCAN", "TABLE ACCESS FULL", "TABLE SCAN")
+        for row in rows:
+            row_str = " ".join(str(val) for val in row.values()).upper()
+            if any(kw in row_str for kw in scan_keywords):
+                return True
+            # SQLite 现代语法：SCAN <table_name>
+            if "SCAN " in row_str and "SCAN CONSTANT" not in row_str:
+                return True
+            # MySQL EXPLAIN 中的 type: ALL
+            if str(row.get("type", "")).strip().upper() == "ALL":
+                return True
+        return False
+
 

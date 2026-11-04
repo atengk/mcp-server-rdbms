@@ -288,4 +288,109 @@ async def test_sql_query_truncated_flag(query_setup):
     assert data_nt["truncated"] is False
 
 
+@pytest.mark.asyncio
+async def test_sql_query_metrics_and_db_echo(query_setup):
+    """测试 sql_query 正确返回 duration_ms、db、data_bytes 与 warning 契约."""
+    server, _ = query_setup
+    result = await server.call_tool(
+        "sql_query",
+        {"sql": "SELECT id, username FROM users ORDER BY id"},
+    )
+    data = result.structured_content
+
+    assert "duration_ms" in data
+    assert isinstance(data["duration_ms"], float)
+    assert data["duration_ms"] >= 0.0
+    # 验证保留两位小数
+    assert data["duration_ms"] == round(data["duration_ms"], 2)
+
+    assert data["db"] == "default"
+    assert "data_bytes" in data
+    assert data["data_bytes"] > 0
+    assert data["warning"] is None
+
+
+@pytest.mark.asyncio
+async def test_sql_query_slow_query_warning(query_setup):
+    """测试当查询耗时超出慢查询阈值时自动注入自愈预警."""
+    server, _ = query_setup
+    with patch("atengk_mcp_server_rdbms.tools.sql_query.get_slow_query_threshold_ms", return_value=0.0):
+        result = await server.call_tool(
+            "sql_query",
+            {"sql": "SELECT id FROM users"},
+        )
+    data = result.structured_content
+    assert data["warning"] is not None
+    assert "当前查询耗时较长" in data["warning"]
+    assert "explain=True" in data["warning"]
+
+
+@pytest.mark.asyncio
+async def test_sql_query_dynamic_timeout_threshold_convergence(query_setup):
+    """测试当指定较小 timeout 时慢查询阈值自适应收敛至 timeout * 50%."""
+    server, _ = query_setup
+    # 模拟基础阈值为 1000ms，但 timeout=0.002s (2ms)，动态收敛为 1ms
+    # 此时微小执行耗时即会超过 1ms 触发慢查询自愈提示
+    result = await server.call_tool(
+        "sql_query",
+        {"sql": "SELECT id, username FROM users", "timeout": 0.002},
+    )
+    data = result.structured_content
+    # 若执行耗时超过 1ms，则动态收敛预警生效
+    if data["duration_ms"] >= 1.0:
+        assert data["warning"] is not None
+        assert "当前查询耗时较长" in data["warning"]
+
+
+
+@pytest.mark.asyncio
+async def test_sql_query_payload_size_warning(query_setup):
+    """测试返回载荷超过 64KB 警戒线时自动提示按需投影."""
+    server, _ = query_setup
+    # SQLite 构造超过 64KB 且单字段不超 2048 字符的查询结果
+    sql = "WITH RECURSIVE cnt(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM cnt WHERE x < 80) SELECT x, hex(randomblob(500)) AS content FROM cnt"
+    result = await server.call_tool(
+        "sql_query",
+        {"sql": sql, "limit": 100},
+    )
+    data = result.structured_content
+    assert data["data_bytes"] >= 65536
+    assert data["warning"] is not None
+    assert "返回数据体积较大" in data["warning"]
+    assert "SELECT *" in data["warning"]
+
+
+@pytest.mark.asyncio
+async def test_sql_query_explain_table_scan_warning(query_setup):
+    """测试 explain=True 时启发式检测全表扫描并提示索引覆盖."""
+    server, _ = query_setup
+    result = await server.call_tool(
+        "sql_query",
+        {"sql": "SELECT * FROM users WHERE score > 50", "explain": True},
+    )
+    data = result.structured_content
+    assert data["warning"] is not None
+    assert "全表扫描" in data["warning"]
+    assert "Full Table Scan" in data["warning"]
+
+
+@pytest.mark.asyncio
+async def test_sql_query_custom_db_routing_echo(query_setup):
+    """测试指定 db 参数时正确回显目标连接别名."""
+    server, registry = query_setup
+    registry.register_url("sqlite:///:memory:", name="analytics")
+    engine = registry.get_engine("analytics")
+    with engine.connect() as conn:
+        conn.execute(text("CREATE TABLE test_analytics (x INT);"))
+        conn.commit()
+
+    result = await server.call_tool(
+        "sql_query",
+        {"sql": "SELECT * FROM test_analytics", "db": "analytics"},
+    )
+    data = result.structured_content
+    assert data["db"] == "analytics"
+
+
+
 

@@ -183,3 +183,38 @@ async def test_sql_ddl_offloaded_to_threadpool(ddl_env):
             {"sql": "CREATE TABLE test_pool (id INT)", "confirm": True},
         )
         assert spy_run_sync.called
+
+
+@pytest.mark.asyncio
+async def test_sql_ddl_metrics_db_and_warning(ddl_env):
+    """测试 sql_ddl 正确返回 duration_ms、db 与 warning 契约."""
+    make_server, _, _ = ddl_env
+    server = make_server(allow_ddl=True)
+
+    res = await server.call_tool(
+        "sql_ddl",
+        {"sql": "CREATE TABLE t_demo (id INT PRIMARY KEY)", "confirm": True},
+    )
+    data = res.structured_content
+    assert data["success"] is True
+    assert isinstance(data["duration_ms"], float)
+    assert data["duration_ms"] == round(data["duration_ms"], 2)
+    assert data["db"] == "default"
+    assert data["warning"] is None
+
+
+@pytest.mark.asyncio
+async def test_sql_ddl_slow_operation_warning(ddl_env):
+    """测试 sql_ddl 耗时较长时给出锁表预警."""
+    make_server, _, _ = ddl_env
+    server = make_server(allow_ddl=True)
+
+    with patch("atengk_mcp_server_rdbms.tools.sql_ddl.get_slow_query_threshold_ms", return_value=0.0):
+        res = await server.call_tool(
+            "sql_ddl",
+            {"sql": "CREATE TABLE t_slow_demo (id INT PRIMARY KEY)", "confirm": True},
+        )
+    data = res.structured_content
+    assert data["warning"] is not None
+    assert "当前结构变更耗时较长" in data["warning"]
+

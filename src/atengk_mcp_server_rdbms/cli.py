@@ -424,6 +424,7 @@ def main(args: list[str] | None = None) -> None:
         audit=audit,
         name=cfg.server_name,
         instructions=cfg.server_instructions,
+        slow_query_threshold_ms=cfg.slow_query_threshold_ms,
     )
 
     try:
