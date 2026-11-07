@@ -18,7 +18,6 @@ from atengk_mcp_server_rdbms.core.exceptions import (
     ConnectionNotFoundError,
     DriverMissingError,
 )
-from atengk_mcp_server_rdbms.models.connection import ConnectionSummary
 from atengk_mcp_server_rdbms.tools.schema_info import fetch_tables_summary
 
 logger = logging.getLogger(__name__)
@@ -50,20 +49,10 @@ def register_resources(
     )
     async def get_connections_resource() -> str:
         """获取当前所有已配置数据库连接的只读脱敏清单资源."""
-        profiles = registry.list_profiles()
-        connections = [
-            ConnectionSummary(
-                name=p.name,
-                dialect=p.dialect,
-                url=p.masked_url,
-                read_only=p.read_only,
-                is_default=(p.name == registry.default_alias),
-            ).to_dict()
-            for p in profiles
-        ]
+        connections = registry.get_summaries()
 
         payload = {
-            "default_connection": registry.default_alias if profiles else None,
+            "default_connection": registry.default_alias if connections else None,
             "total": len(connections),
             "connections": connections,
         }

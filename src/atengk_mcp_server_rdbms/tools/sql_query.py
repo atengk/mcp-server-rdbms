@@ -25,6 +25,7 @@ from atengk_mcp_server_rdbms.core.exceptions import (
     SecurityViolationError,
 )
 from atengk_mcp_server_rdbms.core.guard import ASTGuard
+from atengk_mcp_server_rdbms.core.masker import DynamicDataMasker
 from atengk_mcp_server_rdbms.core.serializer import SafeSerializer
 from atengk_mcp_server_rdbms.models.query import QueryResult
 
@@ -163,8 +164,11 @@ def register_query_tools(
                         f"查询执行超时（已超过 {timeout} 秒限制），已触发慢查询熔断保护。"
                     ) from exc
 
-            # 4. 安全类型序列化与目标格式渲染
-            formatted_data = SafeSerializer.format_rows(rows, format_type=format)
+            # 4. 动态数据脱敏与安全类型序列化渲染
+            mask_enabled, mask_cols = registry.get_effective_masking(db)
+            masker = DynamicDataMasker(enabled=mask_enabled, mask_columns=mask_cols)
+            masked_rows, masked_columns = masker.mask_rows(rows, is_explain=explain)
+            formatted_data = SafeSerializer.format_rows(masked_rows, format_type=format)
             is_truncated = (not explain) and (len(rows) >= limit)
             duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
 
@@ -224,6 +228,7 @@ def register_query_tools(
                 db=target_db,
                 data_bytes=data_bytes,
                 warning=warning_msg,
+                masked_columns=masked_columns,
             ).to_dict()
 
         except (SecurityViolationError, DriverMissingError, ConnectionNotFoundError) as exc:

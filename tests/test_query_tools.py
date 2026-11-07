@@ -42,6 +42,17 @@ def query_setup():
                 {"id": 2, "name": "bob", "score": 80.0, "avatar": large_blob},
             ],
         )
+        conn.execute(text("""
+            CREATE TABLE sensitive_users (
+                id INTEGER PRIMARY KEY,
+                password TEXT NOT NULL,
+                phone TEXT NOT NULL,
+                token_count INTEGER NOT NULL
+            );
+        """))
+        conn.execute(
+            text("INSERT INTO sensitive_users (id, password, phone, token_count) VALUES (1, 'plain_pwd', '13812345678', 10)")
+        )
         conn.commit()
 
     server = MCPServer(name="test-server")
@@ -433,6 +444,104 @@ async def test_sql_query_strict_functions_end_to_end(query_setup):
             {"sql": "SELECT custom_eval(id) FROM users"},
         )
     assert "严格函数模式" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_sql_query_dynamic_masking_json_and_echo(query_setup):
+    """测试 sql_query 默认执行动态数据脱敏并返回 masked_columns 回显."""
+    server, _ = query_setup
+    res = await server.call_tool(
+        "sql_query",
+        {"sql": "SELECT id, password, phone, token_count FROM sensitive_users"},
+    )
+    data = res.structured_content
+
+    assert "masked_columns" in data
+    assert data["masked_columns"] == ["password", "phone"]
+    rows = data["data"]
+    assert rows[0]["password"] == "******"
+    assert rows[0]["phone"] == "138****5678"
+    assert rows[0]["token_count"] == 10
+
+
+@pytest.mark.asyncio
+async def test_sql_query_dynamic_masking_markdown_and_csv(query_setup):
+    """测试 markdown 与 csv 格式下脱敏与 masked_columns 回显保持一致."""
+    server, _ = query_setup
+
+    res_md = await server.call_tool(
+        "sql_query",
+        {
+            "sql": "SELECT id, password, phone FROM sensitive_users",
+            "format": "markdown",
+        },
+    )
+    data_md = res_md.structured_content
+    assert data_md["masked_columns"] == ["password", "phone"]
+    assert "******" in data_md["data"]
+    assert "138****5678" in data_md["data"]
+
+    res_csv = await server.call_tool(
+        "sql_query",
+        {
+            "sql": "SELECT id, password, phone FROM sensitive_users",
+            "format": "csv",
+        },
+    )
+    data_csv = res_csv.structured_content
+    assert data_csv["masked_columns"] == ["password", "phone"]
+    assert "******" in data_csv["data"]
+    assert "138****5678" in data_csv["data"]
+
+
+@pytest.mark.asyncio
+async def test_sql_query_dynamic_masking_alias_bypass(query_setup):
+    """测试别名重命名 SELECT phone AS col1 依然触发脱敏并回显被脱敏列名."""
+    server, _ = query_setup
+    res = await server.call_tool(
+        "sql_query",
+        {"sql": "SELECT phone AS col1 FROM sensitive_users"},
+    )
+    data = res.structured_content
+    assert data["masked_columns"] == ["col1"]
+    assert data["data"][0]["col1"] == "138****5678"
+
+
+@pytest.mark.asyncio
+async def test_sql_query_dynamic_masking_explain_mode_skips_columns(query_setup):
+    """测试 explain 模式跳过列名脱敏且无脱敏时 masked_columns 返回空列表 []."""
+    server, _ = query_setup
+    res = await server.call_tool(
+        "sql_query",
+        {"sql": "SELECT id, username FROM users", "explain": True},
+    )
+    data = res.structured_content
+    assert "masked_columns" in data
+    assert data["masked_columns"] == []
+
+
+@pytest.mark.asyncio
+async def test_sql_query_masking_disabled_via_profile(query_setup):
+    """测试在多库连接 Profile 中显式设置 mask_enabled=False 时展示明文."""
+    server, registry = query_setup
+    # 注册一个关闭脱敏的连接
+    profile = registry.register_url("sqlite:///:memory:", name="dev_unmasked")
+    profile.mask_enabled = False
+    dev_engine = registry.get_engine("dev_unmasked")
+    with dev_engine.connect() as conn:
+        conn.execute(text("CREATE TABLE dev_data (phone TEXT, password TEXT);"))
+        conn.execute(text("INSERT INTO dev_data VALUES ('13812345678', 'secret123');"))
+        conn.commit()
+
+    res = await server.call_tool(
+        "sql_query",
+        {"sql": "SELECT phone, password FROM dev_data", "db": "dev_unmasked"},
+    )
+    data = res.structured_content
+    assert data["masked_columns"] == []
+    assert data["data"][0]["phone"] == "13812345678"
+    assert data["data"][0]["password"] == "secret123"
+
 
 
 

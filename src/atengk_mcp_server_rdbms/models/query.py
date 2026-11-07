@@ -26,6 +26,7 @@ class QueryResult:
     db: str = ""
     data_bytes: int = 0
     warning: str | None = None
+    masked_columns: list[str] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         """转换为标准字典载荷."""

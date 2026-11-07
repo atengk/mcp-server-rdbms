@@ -54,6 +54,9 @@ CLI_EPILOG = """
   MCP_RDBMS_ALLOWED_HOSTS      HTTP/SSE 模式下的 Host 主机白名单 (逗号分隔或 '*' 通配全部)
   MCP_RDBMS_ALLOWED_ORIGINS    HTTP/SSE 模式下的 Origin 来源白名单 (逗号分隔或 '*' 通配全部)
   MCP_RDBMS_CORS_ORIGINS       跨域资源共享 (CORS) 允许来源列表 (逗号分隔或 '*' 通配全部)
+  MCP_RDBMS_SLOW_QUERY_THRESHOLD_MS 慢查询自愈预警阈值毫秒数 (默认 1000.0)
+  MCP_RDBMS_MASK_ENABLED       开启全局动态数据脱敏 (true/false，默认 true)
+  MCP_RDBMS_MASK_COLUMNS       追加自定义脱敏列模式 (逗号分隔，支持通配符如 salary_*)
   MCP_RDBMS_AUDIT_LOG_FILE     审计日志路径 (默认 rdbms_mcp_audit.log)
   MCP_RDBMS_AUDIT_MODE         审计范围 (mutation / all / off)
   MCP_RDBMS_SERVER_NAME        自定义服务实例显示名称（多服务独立挂载时区分业务）
@@ -230,6 +233,18 @@ def parse_args(args: list[str] | None = None) -> argparse.Namespace:
         default=None,
         help="审计日志保留的历史切片副本数（默认: 5）",
     )
+    parser.add_argument(
+        "--no-mask",
+        action="store_true",
+        default=False,
+        help="显式关闭全局动态数据脱敏（默认开启，支持环境变量 MCP_RDBMS_MASK_ENABLED=false）",
+    )
+    parser.add_argument(
+        "--mask-columns",
+        type=str,
+        default=None,
+        help="追加自定义脱敏敏感列模式（逗号分隔，支持通配符如 salary_*，支持环境变量 MCP_RDBMS_MASK_COLUMNS）",
+    )
 
     return parser.parse_args(args)
 
@@ -246,9 +261,13 @@ def build_registry(cfg: ServerRuntimeConfig) -> ConnectionRegistry:
     @return: 初始化就绪的 ConnectionRegistry
     """
     if cfg.config_file:
-        return ConnectionRegistry.from_file(cfg.config_file)
+        return ConnectionRegistry.from_file(
+            cfg.config_file,
+            mask_enabled=cfg.mask_enabled,
+            mask_columns=cfg.mask_columns,
+        )
 
-    registry = ConnectionRegistry()
+    registry = ConnectionRegistry(mask_enabled=cfg.mask_enabled, mask_columns=cfg.mask_columns)
 
     # 1. 优先加载环境变量注入的多数据库配置 (MCP_RDBMS_DB_<ALIAS>)
     if cfg.multi_db_urls:
@@ -422,6 +441,8 @@ def main(args: list[str] | None = None) -> None:
         mode=cfg.audit_mode,
         max_bytes=cfg.audit_max_bytes,
         backup_count=cfg.audit_backup_count,
+        mask_enabled=cfg.mask_enabled,
+        mask_columns=cfg.mask_columns,
     )
 
     server = create_server(

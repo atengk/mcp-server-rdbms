@@ -102,3 +102,55 @@ def test_connection_not_found_contains_available_profiles_and_hint():
     assert "rdbms://connections" in err
     assert "自愈指引" in err
 
+
+def test_connection_registry_effective_masking(tmp_path):
+    """测试 ConnectionRegistry 解析连接级与全局脱敏配置继承与合并."""
+    registry = ConnectionRegistry(mask_enabled=True, mask_columns=("global_col",))
+
+    # 1. 默认继承全局
+    registry.register_url("sqlite:///:memory:", name="db1")
+    enabled1, cols1 = registry.get_effective_masking("db1")
+    assert enabled1 is True
+    assert cols1 == ("global_col",)
+
+    # 2. 连接级显式关闭脱敏
+    p2 = registry.register_url("sqlite:///:memory:", name="db2", mask_enabled=False)
+    assert p2.mask_enabled is False
+    enabled2, cols2 = registry.get_effective_masking("db2")
+    assert enabled2 is False
+    assert cols2 == ("global_col",)
+
+    # 3. 连接级追加 mask_columns 合并去重
+    registry.register_url(
+        "sqlite:///:memory:",
+        name="db3",
+        mask_enabled=True,
+        mask_columns=("local_col", "global_col"),
+    )
+    enabled3, cols3 = registry.get_effective_masking("db3")
+    assert enabled3 is True
+    assert cols3 == ("global_col", "local_col")
+
+    # 4. 从 YAML 文件加载包含 mask_enabled 与 mask_columns
+    cfg_file = tmp_path / "test_conns.yaml"
+    cfg_file.write_text("""
+connections:
+  prod:
+    url: "sqlite:///:memory:"
+    mask_enabled: true
+    mask_columns: ["prod_secret", "id_card"]
+  test_env:
+    url: "sqlite:///:memory:"
+    mask_enabled: false
+""", encoding="utf-8")
+
+    file_reg = ConnectionRegistry.from_file(cfg_file)
+    p_prod = file_reg.get_profile("prod")
+    assert p_prod.mask_enabled is True
+    assert p_prod.mask_columns == ("prod_secret", "id_card")
+
+    p_test = file_reg.get_profile("test_env")
+    assert p_test.mask_enabled is False
+    assert p_test.mask_columns == ()
+
+

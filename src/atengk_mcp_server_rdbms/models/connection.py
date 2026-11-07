@@ -24,6 +24,8 @@ class ConnectionProfile:
     url: str
     read_only: bool = True
     is_default: bool = False
+    mask_enabled: bool | None = None
+    mask_columns: tuple[str, ...] = ()
 
     @property
     def masked_url(self) -> str:
@@ -62,6 +64,7 @@ class ConnectionSummary:
     url: str
     read_only: bool
     is_default: bool
+    mask_enabled: bool = True
 
     def to_dict(self) -> dict[str, Any]:
         """转换为标准字典载荷."""

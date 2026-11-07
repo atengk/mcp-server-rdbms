@@ -110,3 +110,80 @@ def test_audit_logger_log_rotation(tmp_path: Path):
     )
     assert log_file.exists()
     assert rot1.exists()
+
+
+def test_audit_logger_sanitizes_statements_and_error(tmp_path: Path):
+    """测试审计日志中 SQL 语句字面量与 error 报错信息自动执行敏感信息脱敏净化."""
+    log_file = tmp_path / "sanitize_audit.log"
+    logger = AuditLogger(log_file=str(log_file))
+
+    raw_sql = (
+        "UPDATE users SET password = 'secretPassword123', secret = 'jwt_abc_token' "
+        "WHERE phone = '13812345678' AND email = 'test@example.com'"
+    )
+    error_msg = "Constraint failed for phone 13988887777 and password 'myPlainPass'"
+
+    logger.record(
+        operation="sql_dml",
+        db="default",
+        statements=[raw_sql],
+        status="FAILED",
+        error=error_msg,
+    )
+
+    entry = json.loads(log_file.read_text(encoding="utf-8").strip())
+    recorded_sql = entry["statements"][0]
+    assert "secretPassword123" not in recorded_sql
+    assert "jwt_abc_token" not in recorded_sql
+    assert "13812345678" not in recorded_sql
+    assert "test@example.com" not in recorded_sql
+    assert "138****5678" in recorded_sql
+    assert "t***@example.com" in recorded_sql
+    assert "******" in recorded_sql
+
+    recorded_error = entry["error"]
+    assert "myPlainPass" not in recorded_error
+    assert "13988887777" not in recorded_error
+    assert "139****7777" in recorded_error
+
+
+def test_audit_logger_masking_disabled(tmp_path: Path):
+    """测试当 mask_enabled=False 时审计日志保留原始语句与错误文本."""
+    log_file = tmp_path / "unmasked_audit.log"
+    logger = AuditLogger(log_file=str(log_file), mask_enabled=False)
+
+    raw_sql = "UPDATE users SET password = 'rawSecretPassword' WHERE phone = '13812345678'"
+    logger.record(
+        operation="sql_dml",
+        db="default",
+        statements=[raw_sql],
+        status="SUCCESS",
+    )
+
+    entry = json.loads(log_file.read_text(encoding="utf-8").strip())
+    assert "rawSecretPassword" in entry["statements"][0]
+    assert "13812345678" in entry["statements"][0]
+
+
+def test_audit_logger_sanitizes_insert_statements(tmp_path: Path):
+    """测试审计日志中 INSERT 语句按敏感列名位置映射净化字面量."""
+    log_file = tmp_path / "insert_audit.log"
+    logger = AuditLogger(log_file=str(log_file))
+
+    raw_insert = "INSERT INTO users (id, password, phone, remark) VALUES (1, 'mySecretPwd123', '13812345678', 'normal_note')"
+    logger.record(
+        operation="sql_dml",
+        db="default",
+        statements=[raw_insert],
+        status="SUCCESS",
+    )
+
+    entry = json.loads(log_file.read_text(encoding="utf-8").strip())
+    recorded_sql = entry["statements"][0]
+    assert "mySecretPwd123" not in recorded_sql
+    assert "13812345678" not in recorded_sql
+    assert "'******'" in recorded_sql
+    assert "138****5678" in recorded_sql
+    assert "normal_note" in recorded_sql
+
+

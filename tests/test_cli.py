@@ -318,3 +318,25 @@ def test_main_finally_closes_registry(monkeypatch):
     mock_registry.close_all.assert_called_once()
 
 
+def test_parse_args_masking():
+    """测试命令行解析 --no-mask 与 --mask-columns 参数."""
+    # 默认值
+    args_default = parse_args([])
+    assert args_default.no_mask is False
+    assert args_default.mask_columns is None
+
+    # 自定义指定
+    args_custom = parse_args(["--no-mask", "--mask-columns", "salary_*,address"])
+    assert args_custom.no_mask is True
+    assert args_custom.mask_columns == "salary_*,address"
+
+    # build_registry 传递
+    from atengk_mcp_server_rdbms.cli import build_registry
+    from atengk_mcp_server_rdbms.core.env import resolve_runtime_config
+    cfg = resolve_runtime_config(args=args_custom, env={})
+    reg = build_registry(cfg)
+    assert reg.mask_enabled is False
+    assert reg.mask_columns == ("salary_*", "address")
+
+
+

@@ -348,4 +348,32 @@ def test_resolve_runtime_config_strict_functions():
     assert cfg_args.strict_functions is True
 
 
+def test_resolve_runtime_config_masking():
+    """测试通过环境变量与命令行参数解析动态数据脱敏配置."""
+    import argparse
+
+    # 1. 默认状态：mask_enabled 为 True, mask_columns 为空元组
+    cfg_default = resolve_runtime_config(args=None, env={})
+    assert cfg_default.mask_enabled is True
+    assert cfg_default.mask_columns == ()
+
+    # 2. 环境变量关闭脱敏
+    cfg_off = resolve_runtime_config(args=None, env={"MCP_RDBMS_MASK_ENABLED": "false"})
+    assert cfg_off.mask_enabled is False
+
+    # 3. 命令行参数 --no-mask 强制关闭脱敏
+    args_no_mask = argparse.Namespace(no_mask=True)
+    cfg_arg_off = resolve_runtime_config(args=args_no_mask, env={"MCP_RDBMS_MASK_ENABLED": "true"})
+    assert cfg_arg_off.mask_enabled is False
+
+    # 4. 环境变量与命令行自定义 mask_columns
+    cfg_cols = resolve_runtime_config(args=None, env={"MCP_RDBMS_MASK_COLUMNS": "salary_*, real_name, home_address"})
+    assert cfg_cols.mask_columns == ("salary_*", "real_name", "home_address")
+
+    args_cols = argparse.Namespace(mask_columns="custom_col, secret_*")
+    cfg_arg_cols = resolve_runtime_config(args=args_cols, env={})
+    assert cfg_arg_cols.mask_columns == ("custom_col", "secret_*")
+
+
+
 

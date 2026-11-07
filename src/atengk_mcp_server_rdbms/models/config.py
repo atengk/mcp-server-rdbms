@@ -36,3 +36,5 @@ class ServerRuntimeConfig(NamedTuple):
     cors_origins: tuple[str, ...] = ()
     slow_query_threshold_ms: float = 1000.0
     strict_functions: bool = False
+    mask_enabled: bool = True
+    mask_columns: tuple[str, ...] = ()

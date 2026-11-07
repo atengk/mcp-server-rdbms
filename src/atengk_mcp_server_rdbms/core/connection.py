@@ -26,10 +26,17 @@ class ConnectionRegistry:
     @since 2026-10-04
     """
 
-    def __init__(self, profiles: list[ConnectionProfile] | None = None) -> None:
+    def __init__(
+        self,
+        profiles: list[ConnectionProfile] | None = None,
+        mask_enabled: bool = True,
+        mask_columns: tuple[str, ...] | list[str] = (),
+    ) -> None:
         self._profiles: dict[str, ConnectionProfile] = {}
         self._engines: dict[str, Engine] = {}
         self._default_alias: str | None = None
+        self.mask_enabled: bool = mask_enabled
+        self.mask_columns: tuple[str, ...] = tuple(mask_columns)
 
         if profiles:
             for profile in profiles:
@@ -55,6 +62,8 @@ class ConnectionRegistry:
         name: str = "default",
         is_default: bool = True,
         read_only: bool = False,
+        mask_enabled: bool | None = None,
+        mask_columns: tuple[str, ...] | list[str] = (),
     ) -> ConnectionProfile:
         """通过 URL 便捷注册单个数据库连接.
 
@@ -62,6 +71,8 @@ class ConnectionRegistry:
         @param name: 连接别名
         @param is_default: 是否设为默认连接
         @param read_only: 是否只读模式
+        @param mask_enabled: 是否单独覆盖脱敏开关状态
+        @param mask_columns: 连接专属脱敏列配置
         @return: 注册后的 ConnectionProfile
         """
         profile = ConnectionProfile(
@@ -69,15 +80,24 @@ class ConnectionRegistry:
             url=url,
             read_only=read_only,
             is_default=is_default,
+            mask_enabled=mask_enabled,
+            mask_columns=tuple(mask_columns),
         )
         self.register(profile)
         return profile
 
     @classmethod
-    def from_file(cls, path: str | Path) -> "ConnectionRegistry":
+    def from_file(
+        cls,
+        path: str | Path,
+        mask_enabled: bool = True,
+        mask_columns: tuple[str, ...] | list[str] = (),
+    ) -> "ConnectionRegistry":
         """从 YAML 或 JSON 配置文件加载并构建连接注册表.
 
         @param path: 配置文件路径
+        @param mask_enabled: 全局动态数据脱敏开关
+        @param mask_columns: 全局敏感列模式
         @return: 初始化就绪的 ConnectionRegistry 实例
         @throws FileNotFoundError: 配置文件不存在时抛出
         @throws TypeError: 配置文件格式不合法时抛出
@@ -99,7 +119,7 @@ class ConnectionRegistry:
         if not isinstance(data, dict):
             raise TypeError(f"配置文件顶层格式必须为映射字典，当前为: {type(data).__name__}")
 
-        registry = cls()
+        registry = cls(mask_enabled=mask_enabled, mask_columns=mask_columns)
         default_name = data.get("default")
         raw_conns = data.get("connections", {})
 
@@ -127,11 +147,23 @@ class ConnectionRegistry:
         default_name: str | None,
     ) -> ConnectionProfile:
         """从配置项字典中抽取并构建 ConnectionProfile 实例."""
+        raw_mask_enabled = item.get("mask_enabled")
+        mask_enabled = bool(raw_mask_enabled) if raw_mask_enabled is not None else None
+        raw_mask_cols = item.get("mask_columns", [])
+        if isinstance(raw_mask_cols, str):
+            mask_cols = tuple(c.strip() for c in raw_mask_cols.split(",") if c.strip())
+        elif isinstance(raw_mask_cols, (list, tuple)):
+            mask_cols = tuple(str(c).strip() for c in raw_mask_cols if str(c).strip())
+        else:
+            mask_cols = ()
+
         return ConnectionProfile(
             name=name,
             url=str(item["url"]),
             read_only=bool(item.get("read_only", True)),
             is_default=(name == default_name) or bool(item.get("is_default", False)),
+            mask_enabled=mask_enabled,
+            mask_columns=mask_cols,
         )
 
     def _resolve_name(self, name: str | None) -> str:
@@ -163,6 +195,17 @@ class ConnectionRegistry:
         """
         profile = self.get_profile(name)
         return profile.read_only
+
+    def get_effective_masking(self, name: str | None = None) -> tuple[bool, tuple[str, ...]]:
+        """获取目标数据库连接实际生效的脱敏状态与脱敏列配置.
+
+        @param name: 连接别名，为 None 时获取默认连接
+        @return: (是否启用脱敏, 脱敏列元组)
+        """
+        profile = self.get_profile(name)
+        enabled = profile.mask_enabled if profile.mask_enabled is not None else self.mask_enabled
+        merged_cols = tuple(dict.fromkeys((*self.mask_columns, *profile.mask_columns)))
+        return enabled, merged_cols
 
     def get_engine(self, name: str | None = None) -> Engine:
         """获取目标数据库连接的同步 SQLAlchemy 引擎（懒加载缓存模式）.
@@ -206,6 +249,29 @@ class ConnectionRegistry:
         @return: list[ConnectionProfile]
         """
         return list(self._profiles.values())
+
+    def get_summaries(self) -> list[dict[str, Any]]:
+        """返回全部已注册连接的只读脱敏清单摘要字典列表.
+
+        @return: 连接摘要字典列表，无连接时返回空列表 []
+        """
+        profiles = self.list_profiles()
+        if not profiles:
+            return []
+        default_alias = self.default_alias
+        from atengk_mcp_server_rdbms.models.connection import ConnectionSummary
+
+        return [
+            ConnectionSummary(
+                name=p.name,
+                dialect=p.dialect,
+                url=p.masked_url,
+                read_only=p.read_only,
+                is_default=(p.name == default_alias),
+                mask_enabled=self.get_effective_masking(p.name)[0],
+            ).to_dict()
+            for p in profiles
+        ]
 
     def close_all(self) -> None:
         """释放并关闭全部已创建的数据库引擎与连接池."""

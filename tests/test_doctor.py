@@ -203,3 +203,28 @@ def test_doctor_allowed_hosts_and_cors_probes():
     assert cors_items[0].masked_value == "1 项"
 
 
+def test_doctor_masking_status_probe():
+    """验证 DoctorDiagnostic 正确展示动态数据脱敏状态与自定义脱敏列."""
+    # 1. 默认开启且有自定义列
+    cfg_enabled = resolve_runtime_config(
+        args=parse_args(["--mask-columns", "salary_*,id_card"])
+    )
+    diag1 = DoctorDiagnostic(config=cfg_enabled)
+    rep1 = diag1.diagnose()
+    mask_items1 = [e for e in rep1.env_audit if "动态数据脱敏状态" in e.name]
+    assert len(mask_items1) == 1
+    assert mask_items1[0].status == "ok"
+    assert mask_items1[0].masked_value == "已启用"
+    assert "salary_*" in mask_items1[0].message
+
+    # 2. 显式关闭
+    cfg_disabled = resolve_runtime_config(args=parse_args(["--no-mask"]))
+    diag2 = DoctorDiagnostic(config=cfg_disabled)
+    rep2 = diag2.diagnose()
+    mask_items2 = [e for e in rep2.env_audit if "动态数据脱敏状态" in e.name]
+    assert len(mask_items2) == 1
+    assert mask_items2[0].status == "warn"
+    assert mask_items2[0].masked_value == "已关闭"
+
+
+

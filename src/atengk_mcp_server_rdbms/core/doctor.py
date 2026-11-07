@@ -475,6 +475,31 @@ class DoctorDiagnostic:
                     )
                 )
 
+            # 检查动态数据脱敏配置状态
+            if self.config.mask_enabled:
+                extra_msg = (
+                    f" (已配置自定义敏感列: {list(self.config.mask_columns)})"
+                    if self.config.mask_columns
+                    else ""
+                )
+                items.append(
+                    EnvCheckItem(
+                        name="动态数据脱敏状态 (Dynamic Data Masking)",
+                        status="ok",
+                        message=f"全局动态数据脱敏已默认启用，敏感凭据与隐私数据受安全护栏保护{extra_msg}。",
+                        masked_value="已启用",
+                    )
+                )
+            else:
+                items.append(
+                    EnvCheckItem(
+                        name="动态数据脱敏状态 (Dynamic Data Masking)",
+                        status="warn",
+                        message="全局动态数据脱敏已显式关闭，查询结果集将输出原始敏感数据。",
+                        masked_value="已关闭",
+                    )
+                )
+
         return items
 
     def _probe_connections(self) -> list[ConnectionCheckItem]:

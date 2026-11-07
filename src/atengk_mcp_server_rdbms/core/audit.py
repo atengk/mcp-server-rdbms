@@ -12,6 +12,7 @@ from typing import Any, Literal
 
 import anyio
 
+from atengk_mcp_server_rdbms.core.masker import DynamicDataMasker
 from atengk_mcp_server_rdbms.models.audit import AuditEvent
 
 
@@ -37,6 +38,8 @@ class AuditLogger:
         mode: Literal["mutation", "all", "off"] | str = "mutation",
         max_stmt_chars: int = DEFAULT_MAX_STMT_CHARS,
         max_statements: int = DEFAULT_MAX_STATEMENTS,
+        mask_enabled: bool = True,
+        mask_columns: tuple[str, ...] | list[str] = (),
     ) -> None:
         """初始化审计记录器.
 
@@ -46,6 +49,8 @@ class AuditLogger:
         @param mode: 审计模式（mutation: 仅变更, all: 全量包含查询, off: 关闭）
         @param max_stmt_chars: 单条语句最大允许记录字符数，超长自动截断
         @param max_statements: 批量语句最大记录条数，超量自动截断
+        @param mask_enabled: 是否启用审计字面量脱敏（默认 True）
+        @param mask_columns: 审计脱敏关注的自定义敏感列模式
         """
         self.log_path = Path(log_file or self.DEFAULT_LOG_FILE)
         self.max_bytes = max_bytes
@@ -56,6 +61,9 @@ class AuditLogger:
         )
         self.max_stmt_chars = max_stmt_chars
         self.max_statements = max_statements
+        self.mask_enabled = mask_enabled
+        self.mask_columns: tuple[str, ...] = tuple(mask_columns)
+        self.masker = DynamicDataMasker(enabled=mask_enabled, mask_columns=self.mask_columns)
         self._lock = threading.Lock()
 
     def should_record(self, operation: str) -> bool:
@@ -90,14 +98,19 @@ class AuditLogger:
             truncated_count = total - self.max_statements
 
         for stmt in target_stmts:
-            if len(stmt) > self.max_stmt_chars:
+            clean_stmt = (
+                self.masker.sanitize_sql_or_error_text(stmt)
+                if self.mask_enabled
+                else stmt
+            )
+            if len(clean_stmt) > self.max_stmt_chars:
                 # 保留前 2048 字符与后 1024 字符
-                head = stmt[:2048]
-                tail = stmt[-1024:]
-                omitted = len(stmt) - 3072
+                head = clean_stmt[:2048]
+                tail = clean_stmt[-1024:]
+                omitted = len(clean_stmt) - 3072
                 cleaned.append(f"{head}...[TRUNCATED {omitted} chars]...{tail}")
             else:
-                cleaned.append(stmt)
+                cleaned.append(clean_stmt)
 
         if truncated_count > 0:
             cleaned.append(
@@ -168,9 +181,22 @@ class AuditLogger:
         if not self.should_record(target_op):
             return
 
+        clean_error = (
+            self.masker.sanitize_sql_or_error_text(error)
+            if (error and self.mask_enabled)
+            else error
+        )
+
         if isinstance(event, AuditEvent):
             sanitized_stmts = self.sanitize_statements(event.statements)
-            audit_event = event.model_copy(update={"statements": sanitized_stmts})
+            sanitized_err = (
+                self.masker.sanitize_sql_or_error_text(event.error)
+                if (event.error and self.mask_enabled)
+                else event.error
+            )
+            audit_event = event.model_copy(
+                update={"statements": sanitized_stmts, "error": sanitized_err}
+            )
         elif isinstance(event, str):
             audit_event = AuditEvent(
                 operation=event,
@@ -179,7 +205,7 @@ class AuditLogger:
                 status=status or "SUCCESS",
                 rows_affected=rows_affected,
                 duration_ms=duration_ms,
-                error=error,
+                error=clean_error,
             )
         else:
             audit_event = AuditEvent(
@@ -189,7 +215,7 @@ class AuditLogger:
                 status=status or "SUCCESS",
                 rows_affected=rows_affected,
                 duration_ms=duration_ms,
-                error=error,
+                error=clean_error,
             )
 
         line = audit_event.model_dump_json() + "\n"

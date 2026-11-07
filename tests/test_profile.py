@@ -132,6 +132,7 @@ async def test_db_info_tool_masking():
     local_info = next(item for item in items if item["name"] == "local_mem")
     assert local_info["is_default"] is True
     assert local_info["read_only"] is False
+    assert local_info["mask_enabled"] is True
 
     pg_info = next(item for item in items if item["name"] == "remote_pg")
     assert pg_info["is_default"] is False

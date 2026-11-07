@@ -372,6 +372,8 @@ def resolve_runtime_config(
     arg_allowed_hosts = getattr(args, "allowed_hosts", None) if args else None
     arg_allowed_origins = getattr(args, "allowed_origins", None) if args else None
     arg_cors_origins = getattr(args, "cors_origins", None) if args else None
+    arg_no_mask = bool(getattr(args, "no_mask", False)) if args else False
+    arg_mask_columns = getattr(args, "mask_columns", None) if args else None
 
     allowed_hosts = (
         parse_comma_list(arg_allowed_hosts)
@@ -390,6 +392,20 @@ def resolve_runtime_config(
     )
 
     slow_query_threshold_ms = get_slow_query_threshold_ms(env=source)
+
+    mask_enabled_env = get_env("MCP_RDBMS_MASK_ENABLED", env=source)
+    if arg_no_mask:
+        mask_enabled = False
+    elif mask_enabled_env is not None:
+        mask_enabled = parse_bool_env(mask_enabled_env)
+    else:
+        mask_enabled = True
+
+    mask_columns = (
+        parse_comma_list(arg_mask_columns)
+        if arg_mask_columns
+        else parse_comma_list(get_env("MCP_RDBMS_MASK_COLUMNS", env=source))
+    )
 
     return ServerRuntimeConfig(
         config_file=config_file,
@@ -413,6 +429,8 @@ def resolve_runtime_config(
         cors_origins=cors_origins,
         slow_query_threshold_ms=slow_query_threshold_ms,
         strict_functions=strict_functions,
+        mask_enabled=mask_enabled,
+        mask_columns=mask_columns,
     )
 
 

@@ -272,4 +272,16 @@ _避免使用_: 函数黑名单 (Function Blacklist)、敏感函数列表 (Sensi
 在底层连接与事务执行生命周期内，依据具体数据库方言下发原生只读约束指令并支持优雅容错降级的多态会话策略器。
 _避免使用_: 只读设置器 (ReadOnly Setter)、连接修饰器 (Connection Modifier)
 
+**动态数据脱敏器 (Dynamic Data Masker)**:
+基于敏感列名匹配与值内容特征嗅探的双模驱动引擎，在查询结果集渲染与审计流水记录阶段对个人隐私与业务机密执行动态掩码的合规护栏。
+_避免使用_: 数据混淆器 (Data Obfuscator)、字段加密器 (Field Encryptor)、脱敏过滤器 (Mask Filter)
+
+**脱敏列回显 (Masked Column Echo)**:
+在查询结果集契约中显式标注本次触发动态掩码的列名列表，防止大模型将掩码占位符误判为数据库真实存储值而用于后续过滤或写回的防幻觉机制。
+_避免使用_: 脱敏标记 (Mask Flag)、敏感字段提示 (Sensitive Field Hint)
+
+**审计字面量脱敏 (Audit Literal Sanitization)**:
+在审计流水落盘与资源暴露前，自动识别并掩码 SQL 文本及异常堆栈中内嵌的隐私字面量与敏感列赋值内容的日志净化机制。
+_避免使用_: 日志清理 (Log Cleaning)、SQL 擦除 (SQL Wiping)
+
 

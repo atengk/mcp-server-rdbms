@@ -20,7 +20,7 @@ from atengk_mcp_server_rdbms.core.exceptions import (
     DriverMissingError,
     RdbmsMcpError,
 )
-from atengk_mcp_server_rdbms.models.connection import ConnectionSummary, DatabaseInfo
+from atengk_mcp_server_rdbms.models.connection import DatabaseInfo
 
 logger = logging.getLogger(__name__)
 
@@ -143,17 +143,8 @@ def register_db_info_tool(server: MCPServer, registry: ConnectionRegistry) -> No
                 raise ToolError(f"数据库执行错误: {exc}") from exc
 
         # 2. 缺省调用：获取全部连接清单（密码强制安全脱敏）
+        connections = registry.get_summaries()
         profiles = registry.list_profiles()
-        connections = [
-            ConnectionSummary(
-                name=p.name,
-                dialect=p.dialect,
-                url=p.masked_url,
-                read_only=p.read_only,
-                is_default=(p.name == registry.default_alias),
-            ).to_dict()
-            for p in profiles
-        ]
 
         # 3. 探查当前默认连接，发生网络或驱动异常时实施优雅降级
         current_connection: dict[str, Any] | None = None

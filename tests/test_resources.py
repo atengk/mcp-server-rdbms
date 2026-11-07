@@ -81,6 +81,7 @@ async def test_read_connections_resource(resource_registry):
     # 校验默认库
     assert conn_map["default"]["is_default"] is True
     assert conn_map["default"]["dialect"] == "sqlite"
+    assert conn_map["default"]["mask_enabled"] is True
 
     # 校验敏感密码脱敏
     mysql_conn = conn_map["mysql_remote"]
