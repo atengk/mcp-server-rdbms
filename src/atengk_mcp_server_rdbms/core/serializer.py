@@ -7,6 +7,7 @@ mcp-server-rdbms: 复杂非标类型安全序列化与多格式结果集适配�
 
 import csv
 import io
+import os
 import uuid
 from datetime import date, datetime, time
 from decimal import Decimal
@@ -23,10 +24,26 @@ class SafeSerializer:
     MAX_TEXT_LENGTH: int = 2048
 
     @classmethod
-    def serialize_value(cls, val: Any) -> Any:
+    def get_effective_max_text_length(cls, override: int | None = None) -> int:
+        """获取当前生效的文本最大截断长度.
+
+        @param override: 显式指定的最大截断长度（非 None 时优先采用）
+        @return: 最终生效的最大字符数（<=0 代表关闭截断限制）
+        """
+        if override is not None:
+            return override
+        if "MCP_RDBMS_MAX_TEXT_LENGTH" in os.environ:
+            from atengk_mcp_server_rdbms.core.env import get_max_text_length
+
+            return get_max_text_length()
+        return cls.MAX_TEXT_LENGTH
+
+    @classmethod
+    def serialize_value(cls, val: Any, max_text_length: int | None = None) -> Any:
         """递归安全序列化单个值对象.
 
         @param val: 任意待序列化对象
+        @param max_text_length: 可选长文本最大截断字符数（<=0 关闭截断）
         @return: JSON/文本友好的 Python 原生对象
         """
         if val is None:
@@ -57,16 +74,21 @@ class SafeSerializer:
 
         # 5. 字典容器递归处理
         if isinstance(val, dict):
-            return {str(k): cls.serialize_value(v) for k, v in val.items()}
+            return {
+                str(k): cls.serialize_value(v, max_text_length=max_text_length)
+                for k, v in val.items()
+            }
 
         # 6. 列表与集合容器递归处理
         if isinstance(val, (list, tuple, set)):
-            return [cls.serialize_value(item) for item in val]
+            return [cls.serialize_value(item, max_text_length=max_text_length) for item in val]
 
-        # 7. 字符串长文本自适应截断（超过安全阈值截断并标注）
+        limit_len = cls.get_effective_max_text_length(max_text_length)
+
+        # 7. 字符串长文本自适应截断（超过安全阈值截断并标注，<=0 时关闭截断）
         if isinstance(val, str):
-            if len(val) > cls.MAX_TEXT_LENGTH:
-                return f"{val[:cls.MAX_TEXT_LENGTH]}... [已截断，总长度 {len(val)} 字符]"
+            if limit_len > 0 and len(val) > limit_len:
+                return f"{val[:limit_len]}... [已截断，总长度 {len(val)} 字符]"
             return val
 
         # 8. 基础数值与布尔原生字面量保持原样
@@ -75,31 +97,36 @@ class SafeSerializer:
 
         # 9. 其余未知对象兜底转为字符串并安全截断
         str_val = str(val)
-        if len(str_val) > cls.MAX_TEXT_LENGTH:
-            return f"{str_val[:cls.MAX_TEXT_LENGTH]}... [已截断，总长度 {len(str_val)} 字符]"
+        if limit_len > 0 and len(str_val) > limit_len:
+            return f"{str_val[:limit_len]}... [已截断，总长度 {len(str_val)} 字符]"
         return str_val
 
     @classmethod
-    def serialize_rows(cls, rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def serialize_rows(
+        cls, rows: list[dict[str, Any]], max_text_length: int | None = None
+    ) -> list[dict[str, Any]]:
         """批量序列化行数据字典列表（空列表返回 []）.
 
         @param rows: 原始行字典列表
+        @param max_text_length: 可选长文本最大截断字符数（<=0 关闭截断）
         @return: 序列化后的行字典列表
         """
         if not rows:
             return []
-        return [cls.serialize_value(r) for r in rows]
+        return [cls.serialize_value(r, max_text_length=max_text_length) for r in rows]
 
     @classmethod
     def format_rows(
         cls,
         rows: list[dict[str, Any]],
         format_type: Literal["json", "markdown", "csv"] = "json",
+        max_text_length: int | None = None,
     ) -> list[dict[str, Any]] | str:
         """将结果集行数据根据目标格式渲染为对应载荷.
 
         @param rows: 原始行字典列表
         @param format_type: 目标格式（json / markdown / csv）
+        @param max_text_length: 可选长文本最大截断字符数（<=0 关闭截断）
         @return: 目标格式载荷（list 或 str）
         """
         if not rows:
@@ -110,7 +137,7 @@ class SafeSerializer:
             if format_type == "csv":
                 return ""
 
-        serialized = cls.serialize_rows(rows)
+        serialized = cls.serialize_rows(rows, max_text_length=max_text_length)
 
         if format_type == "json":
             return serialized

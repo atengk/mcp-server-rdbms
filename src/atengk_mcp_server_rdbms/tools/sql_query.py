@@ -18,7 +18,10 @@ from sqlalchemy.exc import SQLAlchemyError
 from atengk_mcp_server_rdbms.core.audit import AuditLogger, audit_logger
 from atengk_mcp_server_rdbms.core.connection import ConnectionRegistry
 from atengk_mcp_server_rdbms.core.dialect import DialectReadOnlyAdapter, DialectRegistry
-from atengk_mcp_server_rdbms.core.env import get_slow_query_threshold_ms
+from atengk_mcp_server_rdbms.core.env import (
+    get_max_text_length,
+    get_slow_query_threshold_ms,
+)
 from atengk_mcp_server_rdbms.core.exceptions import (
     ConnectionNotFoundError,
     DriverMissingError,
@@ -82,6 +85,7 @@ def register_query_tools(
     audit: AuditLogger | None = None,
     slow_query_threshold_ms: float | None = None,
     strict_functions: bool = False,
+    max_text_length: int | None = None,
 ) -> None:
     """向 FastMCP 服务注册 sql_query 与 sql_explain 工具.
 
@@ -90,8 +94,14 @@ def register_query_tools(
     @param audit: 独立审计流水记录器
     @param slow_query_threshold_ms: 慢查询判定基准阈值（毫秒），缺省时由环境变量推导
     @param strict_functions: 是否启用严格纯函数白名单模式（默认 False）
+    @param max_text_length: 单字段长文本最大截断字符数，缺省时由环境变量推导（<=0 关闭截断）
     """
     active_audit = audit or audit_logger
+    default_max_text_length = (
+        max_text_length
+        if max_text_length is not None
+        else get_max_text_length()
+    )
 
     @server.tool(
         name="sql_query",
@@ -168,7 +178,9 @@ def register_query_tools(
             mask_enabled, mask_cols = registry.get_effective_masking(db)
             masker = DynamicDataMasker(enabled=mask_enabled, mask_columns=mask_cols)
             masked_rows, masked_columns = masker.mask_rows(rows, is_explain=explain)
-            formatted_data = SafeSerializer.format_rows(masked_rows, format_type=format)
+            formatted_data = SafeSerializer.format_rows(
+                masked_rows, format_type=format, max_text_length=default_max_text_length
+            )
             is_truncated = (not explain) and (len(rows) >= limit)
             duration_ms = round((time.perf_counter() - start_time) * 1000, 2)
 

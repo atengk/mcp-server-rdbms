@@ -339,4 +339,20 @@ def test_parse_args_masking():
     assert reg.mask_columns == ("salary_*", "address")
 
 
+def test_parse_args_max_text_length():
+    """测试命令行解析 --max-text-length 参数."""
+    # 默认值
+    args_default = parse_args([])
+    assert args_default.max_text_length is None
+
+    # 自定义指定
+    args_custom = parse_args(["--max-text-length", "4096"])
+    assert args_custom.max_text_length == 4096
+
+    # 设为 0 关闭截断
+    args_zero = parse_args(["--max-text-length", "0"])
+    assert args_zero.max_text_length == 0
+
+
+
 

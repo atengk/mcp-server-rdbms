@@ -39,6 +39,7 @@ DEFAULT_DIALECT_PORTS: dict[str, int] = {
 
 TRUE_BOOLEAN_STRINGS: frozenset[str] = frozenset({"1", "true", "yes", "on", "t"})
 DEFAULT_SLOW_QUERY_THRESHOLD_MS: float = 1000.0
+DEFAULT_MAX_TEXT_LENGTH: int = 2048
 
 
 def get_slow_query_threshold_ms(env: Mapping[str, str] | None = None) -> float:
@@ -57,6 +58,24 @@ def get_slow_query_threshold_ms(env: Mapping[str, str] | None = None) -> float:
         return max(0.0, val)
     except (ValueError, TypeError):
         return DEFAULT_SLOW_QUERY_THRESHOLD_MS
+
+
+def get_max_text_length(env: Mapping[str, str] | None = None) -> int:
+    """获取单字段文本自适应截断字符长度阈值.
+
+    从专属环境变量 MCP_RDBMS_MAX_TEXT_LENGTH 读取，缺省或非数字时回退到 2048.
+    若配置为 <= 0，则代表关闭截断限制（全量输出完整文本）.
+
+    @param env: 环境变量映射源，缺省时使用 os.environ
+    @return: 单字段最大截断字符数（<=0 表示关闭截断）
+    """
+    raw = get_env("MCP_RDBMS_MAX_TEXT_LENGTH", env=env)
+    if raw is None:
+        return DEFAULT_MAX_TEXT_LENGTH
+    try:
+        return int(raw)
+    except (ValueError, TypeError):
+        return DEFAULT_MAX_TEXT_LENGTH
 
 
 def load_dotenv_if_exists(dotenv_path: str = ".env") -> dict[str, str]:
@@ -407,6 +426,18 @@ def resolve_runtime_config(
         else parse_comma_list(get_env("MCP_RDBMS_MASK_COLUMNS", env=source))
     )
 
+    arg_max_text_length = getattr(args, "max_text_length", None) if args else None
+    max_text_length_env = get_env("MCP_RDBMS_MAX_TEXT_LENGTH", env=source)
+    if arg_max_text_length is not None:
+        max_text_length = arg_max_text_length
+    elif max_text_length_env is not None:
+        try:
+            max_text_length = int(max_text_length_env)
+        except ValueError:
+            max_text_length = DEFAULT_MAX_TEXT_LENGTH
+    else:
+        max_text_length = DEFAULT_MAX_TEXT_LENGTH
+
     return ServerRuntimeConfig(
         config_file=config_file,
         db_url=db_url,
@@ -431,6 +462,7 @@ def resolve_runtime_config(
         strict_functions=strict_functions,
         mask_enabled=mask_enabled,
         mask_columns=mask_columns,
+        max_text_length=max_text_length,
     )
 
 

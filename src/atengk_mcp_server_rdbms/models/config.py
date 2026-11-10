@@ -38,3 +38,4 @@ class ServerRuntimeConfig(NamedTuple):
     strict_functions: bool = False
     mask_enabled: bool = True
     mask_columns: tuple[str, ...] = ()
+    max_text_length: int = 2048

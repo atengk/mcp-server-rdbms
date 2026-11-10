@@ -5,10 +5,13 @@ mcp-server-rdbms: 环境变量分层解析与连接串自动拼装测试套件.
 @since 2026-10-04
 """
 
+import argparse
 import os
 
 from atengk_mcp_server_rdbms.core.env import (
+    DEFAULT_MAX_TEXT_LENGTH,
     assemble_db_url_from_env,
+    get_max_text_length,
     load_dotenv_if_exists,
     parse_bool_env,
     resolve_runtime_config,
@@ -373,6 +376,36 @@ def test_resolve_runtime_config_masking():
     args_cols = argparse.Namespace(mask_columns="custom_col, secret_*")
     cfg_arg_cols = resolve_runtime_config(args=args_cols, env={})
     assert cfg_arg_cols.mask_columns == ("custom_col", "secret_*")
+
+
+def test_get_max_text_length_and_config():
+    """测试单字段长文本截断长度的环境变量与配置解析."""
+    # 1. 缺省回退默认 2048
+    assert get_max_text_length({}) == DEFAULT_MAX_TEXT_LENGTH
+    cfg_def = resolve_runtime_config(args=None, env={})
+    assert cfg_def.max_text_length == DEFAULT_MAX_TEXT_LENGTH
+
+    # 2. 正常环境变量解析
+    assert get_max_text_length({"MCP_RDBMS_MAX_TEXT_LENGTH": "8192"}) == 8192
+    cfg_env = resolve_runtime_config(args=None, env={"MCP_RDBMS_MAX_TEXT_LENGTH": "8192"})
+    assert cfg_env.max_text_length == 8192
+
+    # 3. 0 与负数（关闭截断）
+    assert get_max_text_length({"MCP_RDBMS_MAX_TEXT_LENGTH": "0"}) == 0
+    assert get_max_text_length({"MCP_RDBMS_MAX_TEXT_LENGTH": "-1"}) == -1
+    cfg_zero = resolve_runtime_config(args=None, env={"MCP_RDBMS_MAX_TEXT_LENGTH": "0"})
+    assert cfg_zero.max_text_length == 0
+
+    # 4. 非法非数字回退默认
+    assert get_max_text_length({"MCP_RDBMS_MAX_TEXT_LENGTH": "invalid"}) == DEFAULT_MAX_TEXT_LENGTH
+    cfg_invalid = resolve_runtime_config(args=None, env={"MCP_RDBMS_MAX_TEXT_LENGTH": "not_a_number"})
+    assert cfg_invalid.max_text_length == DEFAULT_MAX_TEXT_LENGTH
+
+    # 5. 命令行参数优先于环境变量
+    args_custom = argparse.Namespace(max_text_length=4096)
+    cfg_override = resolve_runtime_config(args=args_custom, env={"MCP_RDBMS_MAX_TEXT_LENGTH": "1000"})
+    assert cfg_override.max_text_length == 4096
+
 
 
 

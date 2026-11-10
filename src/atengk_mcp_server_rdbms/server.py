@@ -32,6 +32,7 @@ def create_server(
     instructions: str | None = None,
     slow_query_threshold_ms: float | None = None,
     strict_functions: bool = False,
+    max_text_length: int | None = None,
 ) -> MCPServer:
     """创建并装配 FastMCP 服务实例.
 
@@ -43,6 +44,7 @@ def create_server(
     @param instructions: 面向大模型的系统指令（支持通过 --server-instructions 或 MCP_RDBMS_SERVER_INSTRUCTIONS 定制）
     @param slow_query_threshold_ms: 慢操作判定基准阈值（毫秒）
     @param strict_functions: 是否启用严格纯函数白名单模式（默认 False）
+    @param max_text_length: 单字段长文本最大截断字符数（<=0 关闭截断）
     @return: 已装配领域工具的 MCPServer 实例
     """
     if registry is None:
@@ -66,6 +68,7 @@ def create_server(
         audit=audit,
         slow_query_threshold_ms=slow_query_threshold_ms,
         strict_functions=strict_functions,
+        max_text_length=max_text_length,
     )
 
     # 4. 装配 sql_ 命名空间 DML 变更工具（受 allow_dml 门禁控制）(sql_dml)

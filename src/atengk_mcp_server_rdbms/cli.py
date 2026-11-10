@@ -57,6 +57,7 @@ CLI_EPILOG = """
   MCP_RDBMS_SLOW_QUERY_THRESHOLD_MS 慢查询自愈预警阈值毫秒数 (默认 1000.0)
   MCP_RDBMS_MASK_ENABLED       开启全局动态数据脱敏 (true/false，默认 true)
   MCP_RDBMS_MASK_COLUMNS       追加自定义脱敏列模式 (逗号分隔，支持通配符如 salary_*)
+  MCP_RDBMS_MAX_TEXT_LENGTH    单字段长文本最大截断字符长度 (默认 2048，<=0 关闭截断)
   MCP_RDBMS_AUDIT_LOG_FILE     审计日志路径 (默认 rdbms_mcp_audit.log)
   MCP_RDBMS_AUDIT_MODE         审计范围 (mutation / all / off)
   MCP_RDBMS_SERVER_NAME        自定义服务实例显示名称（多服务独立挂载时区分业务）
@@ -244,6 +245,12 @@ def parse_args(args: list[str] | None = None) -> argparse.Namespace:
         type=str,
         default=None,
         help="追加自定义脱敏敏感列模式（逗号分隔，支持通配符如 salary_*，支持环境变量 MCP_RDBMS_MASK_COLUMNS）",
+    )
+    parser.add_argument(
+        "--max-text-length",
+        type=int,
+        default=None,
+        help="单字段长文本最大字符截断长度（默认: 2048，<=0 表示关闭截断，支持环境变量 MCP_RDBMS_MAX_TEXT_LENGTH）",
     )
 
     return parser.parse_args(args)
@@ -454,6 +461,7 @@ def main(args: list[str] | None = None) -> None:
         instructions=cfg.server_instructions,
         slow_query_threshold_ms=cfg.slow_query_threshold_ms,
         strict_functions=cfg.strict_functions,
+        max_text_length=cfg.max_text_length,
     )
 
     try:

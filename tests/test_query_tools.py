@@ -543,6 +543,41 @@ async def test_sql_query_masking_disabled_via_profile(query_setup):
     assert data["data"][0]["password"] == "secret123"
 
 
+@pytest.mark.asyncio
+async def test_sql_query_max_text_length_config():
+    """测试 sql_query 在装配时指定 max_text_length 时的长文本截断与关闭截断行为."""
+    registry = ConnectionRegistry()
+    registry.register_url("sqlite:///:memory:", name="default")
+    engine = registry.get_engine("default")
+    long_content = "Z" * 500
+
+    with engine.connect() as conn:
+        conn.execute(text("CREATE TABLE text_demo (id INT, content TEXT);"))
+        conn.execute(
+            text("INSERT INTO text_demo VALUES (1, :content);"),
+            {"content": long_content},
+        )
+        conn.commit()
+
+    # 1. 服务指定 max_text_length=50 触发截断
+    server_limited = MCPServer(name="test-limited")
+    register_query_tools(server_limited, registry, max_text_length=50)
+
+    res_lim = await server_limited.call_tool("sql_query", {"sql": "SELECT content FROM text_demo"})
+    data_lim = res_lim.structured_content
+    assert data_lim["data"][0]["content"].startswith("Z" * 50)
+    assert data_lim["data"][0]["content"].endswith("... [已截断，总长度 500 字符]")
+
+    # 2. 服务指定 max_text_length=0 关闭截断（全量输出）
+    server_unlimited = MCPServer(name="test-unlimited")
+    register_query_tools(server_unlimited, registry, max_text_length=0)
+
+    res_unlim = await server_unlimited.call_tool("sql_query", {"sql": "SELECT content FROM text_demo"})
+    data_unlim = res_unlim.structured_content
+    assert data_unlim["data"][0]["content"] == long_content
+
+
+
 
 
 

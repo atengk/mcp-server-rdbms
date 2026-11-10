@@ -398,6 +398,7 @@ uvx atengk-mcp-server-rdbms --version
 | **审计记录范围** | `MCP_RDBMS_AUDIT_MODE` | 审计模式：`mutation`（仅变更, 默认）、`all`（含只读查询）、`off`（关闭） |
 | **审计单片大小** | `MCP_RDBMS_AUDIT_MAX_BYTES` | 触发日志切片轮转的最大字节数（默认 10MB: `10485760`） |
 | **审计保留份数** | `MCP_RDBMS_AUDIT_BACKUP_COUNT` | 保留的历史切片副本数（默认 `5`） |
+| **长文本截断长度** | `MCP_RDBMS_MAX_TEXT_LENGTH` | 单字段长文本最大返回字符数（默认 `2048`，设置 `<=0` 关闭截断） |
 
 > 📌 **解析优先级规则**：`命令行参数 (最高)` > `全量 URL 环境变量` > `独立字段环境变量拼装` > `标准内置默认值`。本地执行时会自动探测读取同级目录下的 `.env` 文件。
 
@@ -707,6 +708,7 @@ uv pip install "atengk-mcp-server-rdbms[all]"         # 一键安装所有驱动
 | **`--audit-mode`** | `str` | `MCP_RDBMS_AUDIT_MODE` | `mutation` | 审计范围：`mutation`（仅 DML/DDL 变更）、`all`（全量含只读分析）、`off`（完全关闭） |
 | **`--audit-max-bytes`** | `int` | `MCP_RDBMS_AUDIT_MAX_BYTES` | `10485760` (10MB) | 单文件触发日志切片轮转的最大字节数 |
 | **`--audit-backup-count`** | `int` | `MCP_RDBMS_AUDIT_BACKUP_COUNT` | `5` | 本地保留的历史审计切片日志副本数量 |
+| **`--max-text-length`** | `int` | `MCP_RDBMS_MAX_TEXT_LENGTH` | `2048` | 单字段长文本最大截断字符长度（默认 2048，<=0 关闭截断） |
 
 ---
 

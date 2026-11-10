@@ -121,3 +121,38 @@ def test_text_truncation_across_formats():
     assert isinstance(csv_res, str)
     assert "... [已截断，总长度 2500 字符]" in csv_res
 
+
+def test_text_truncation_custom_length_and_disable(monkeypatch):
+    """测试通过显式参数与环境变量自定义截断长度或关闭截断."""
+    long_text = "x" * 3000
+
+    # 1. 显式传入自定义截断阈值 100
+    res_100 = SafeSerializer.serialize_value(long_text, max_text_length=100)
+    assert res_100.startswith("x" * 100)
+    assert res_100.endswith("... [已截断，总长度 3000 字符]")
+
+    # 2. 显式传入 0 关闭截断（全量输出）
+    res_unlimited = SafeSerializer.serialize_value(long_text, max_text_length=0)
+    assert res_unlimited == long_text
+
+    # 3. 显式传入负数关闭截断
+    res_neg = SafeSerializer.serialize_value(long_text, max_text_length=-1)
+    assert res_neg == long_text
+
+    # 4. format_rows 支持 max_text_length=0 关闭截断
+    rows = [{"content": long_text}]
+    json_unlimited = SafeSerializer.format_rows(rows, format_type="json", max_text_length=0)
+    assert json_unlimited[0]["content"] == long_text
+
+    # 5. 环境变量 MCP_RDBMS_MAX_TEXT_LENGTH 动态控制
+    monkeypatch.setenv("MCP_RDBMS_MAX_TEXT_LENGTH", "50")
+    res_env = SafeSerializer.serialize_value(long_text)
+    assert res_env.startswith("x" * 50)
+    assert res_env.endswith("... [已截断，总长度 3000 字符]")
+
+    # 6. 环境变量设置为 0 关闭截断
+    monkeypatch.setenv("MCP_RDBMS_MAX_TEXT_LENGTH", "0")
+    res_env_zero = SafeSerializer.serialize_value(long_text)
+    assert res_env_zero == long_text
+
+
